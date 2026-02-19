@@ -11,6 +11,7 @@ import {
   Chip,
   CircularProgress,
   Alert,
+  Pagination,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PeopleIcon from '@mui/icons-material/People';
@@ -67,11 +68,9 @@ export const DataManagementPage = () => {
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [offset, setOffset] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState<FilterValues>({
     name: '',
     uid: '',
@@ -81,19 +80,25 @@ export const DataManagementPage = () => {
     sources: [],
   });
 
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 20;
 
-  // Fetch students from API on mount
+  // Fetch students from API - refetch when filters or page changes
   useEffect(() => {
     const fetchStudents = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await api.getStudents({ limit: PAGE_SIZE, offset: 0 });
+        const offset = (currentPage - 1) * PAGE_SIZE;
+        const data = await api.getStudents({
+          limit: PAGE_SIZE,
+          offset,
+          name: filters.name || undefined,
+          major: filters.major || undefined,
+          school: filters.school || undefined,
+          term: filters.term || undefined,
+        });
         setStudents(data.students);
-        setHasMore(data.has_more || false);
         setTotalCount(data.total || data.count);
-        setOffset(PAGE_SIZE);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch students');
         console.error('Error fetching students:', err);
@@ -103,56 +108,43 @@ export const DataManagementPage = () => {
     };
 
     fetchStudents();
-  }, []);
+  }, [filters, currentPage]);
 
-  // Load more students
-  const loadMore = async () => {
-    if (loadingMore || !hasMore) return;
+  // Reset to page 1 when server-side filters change (not uid or sources)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.name, filters.major, filters.school, filters.term]);
 
-    try {
-      setLoadingMore(true);
-      const data = await api.getStudents({ limit: PAGE_SIZE, offset });
-      setStudents((prev) => [...prev, ...data.students]);
-      setHasMore(data.has_more || false);
-      setOffset((prev) => prev + PAGE_SIZE);
-    } catch (err) {
-      console.error('Error loading more students:', err);
-      alert('Failed to load more students. Please try again.');
-    } finally {
-      setLoadingMore(false);
-    }
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  const handlePageClick = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const filteredStudents = useMemo(() => {
+    // Server handles name, major, school, term filtering
+    // Client only needs to filter by UID and sources (data availability)
     return students.filter((student) => {
-      const matchesName = !filters.name ||
-        student.name.toLowerCase().includes(filters.name.toLowerCase());
-      const matchesUid = !filters.uid ||
-        student.uid.includes(filters.uid);
-      const matchesMajor = !filters.major ||
-        student.major.toLowerCase().includes(filters.major.toLowerCase());
-      const matchesSchool = !filters.school ||
-        student.school.toLowerCase().includes(filters.school.toLowerCase());
-      const matchesTerm = !filters.term ||
-        student.term.toLowerCase().includes(filters.term.toLowerCase());
+      const matchesUid = !filters.uid || student.uid.includes(filters.uid);
 
-      // Source filtering: if sources are selected, student must have data from at least one selected source
+      // Source filtering: if sources are selected, student must match at least one
+      const hasNoSource =
+        (!student.qualtrics_data || student.qualtrics_data.length === 0) &&
+        (!student.linkedin_data || student.linkedin_data.length === 0) &&
+        (!student.clearinghouse_data || student.clearinghouse_data.length === 0);
+
       const matchesSources = filters.sources.length === 0 || filters.sources.some(source => {
-        if (source === 'qualtrics') {
-          return student.qualtrics_data && student.qualtrics_data.length > 0;
-        }
-        if (source === 'linkedin') {
-          return student.linkedin_data && student.linkedin_data.length > 0;
-        }
-        if (source === 'clearinghouse') {
-          return student.clearinghouse_data && student.clearinghouse_data.length > 0;
-        }
+        if (source === 'qualtrics') return student.qualtrics_data && student.qualtrics_data.length > 0;
+        if (source === 'linkedin') return student.linkedin_data && student.linkedin_data.length > 0;
+        if (source === 'clearinghouse') return student.clearinghouse_data && student.clearinghouse_data.length > 0;
+        if (source === 'no-source') return hasNoSource;
         return false;
       });
 
-      return matchesName && matchesUid && matchesMajor && matchesSchool && matchesTerm && matchesSources;
+      return matchesUid && matchesSources;
     });
-  }, [students, filters]);
+  }, [students, filters.uid, filters.sources]);
 
   const handleSelectSource = async (
     studentUid: string,
@@ -453,7 +445,7 @@ export const DataManagementPage = () => {
               >
                 <Chip
                   icon={<PeopleIcon />}
-                  label={`${students.length} of ${totalCount} Students Loaded`}
+                  label={`${totalCount} Total Students • Page ${currentPage} of ${totalPages}`}
                   sx={{
                     background: 'linear-gradient(135deg, #1976D2 0%, #2196F3 100%)',
                     color: 'white',
@@ -525,39 +517,40 @@ export const DataManagementPage = () => {
                     onEditMaster={handleEditMaster}
                   />
 
-                  {/* Load More Button */}
-                  {!hasActiveFilters && hasMore && (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 4 }}>
-                      <Button
-                        variant="contained"
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 2,
+                        mt: 4,
+                        mb: 4,
+                      }}
+                    >
+                      <Pagination
+                        count={totalPages}
+                        page={currentPage}
+                        onChange={(_, page) => handlePageClick(page)}
+                        color="primary"
                         size="large"
-                        onClick={loadMore}
-                        disabled={loadingMore}
+                        showFirstButton
+                        showLastButton
                         sx={{
-                          background: 'linear-gradient(135deg, #E21833 0%, #C41230 100%)',
-                          color: 'white',
-                          px: 6,
-                          py: 1.5,
-                          fontWeight: 600,
-                          borderRadius: 3,
-                          boxShadow: '0 4px 12px rgba(226, 24, 51, 0.3)',
-                          '&:hover': {
-                            background: 'linear-gradient(135deg, #C41230 0%, #A01028 100%)',
-                            transform: 'translateY(-2px)',
-                            boxShadow: '0 6px 20px rgba(226, 24, 51, 0.4)',
+                          '& .MuiPaginationItem-root': {
+                            fontWeight: 600,
+                            fontSize: '1rem',
                           },
-                          transition: 'all 0.3s ease',
+                          '& .Mui-selected': {
+                            background: 'linear-gradient(135deg, #E21833 0%, #C41230 100%) !important',
+                            color: 'white',
+                          },
                         }}
-                      >
-                        {loadingMore ? (
-                          <>
-                            <CircularProgress size={20} sx={{ color: 'white', mr: 1 }} />
-                            Loading...
-                          </>
-                        ) : (
-                          `Load More (${students.length} of ${totalCount})`
-                        )}
-                      </Button>
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        Showing {filteredStudents.length > 0 ? ((currentPage - 1) * PAGE_SIZE + 1) : 0} - {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} students
+                      </Typography>
                     </Box>
                   )}
                 </>

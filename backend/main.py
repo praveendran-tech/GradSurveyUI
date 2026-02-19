@@ -10,7 +10,7 @@ app = FastAPI(title="Graduate Outcomes Data Management API")
 # CORS configuration - allow frontend to access API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Vite dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,42 +39,41 @@ def get_all_students(
     major: Optional[str] = None,
     school: Optional[str] = None,
     term: Optional[str] = None,
-    limit: Optional[int] = 50,
+    limit: Optional[int] = 20,
     offset: Optional[int] = 0
 ):
     """
-    Get all students with their associated data from all sources.
+    Get students with their associated data from all sources.
     Optionally filter by name, major, school, or term.
     Supports pagination with limit and offset.
+    All filtering and pagination happens at the database level for efficiency.
     """
     try:
-        students = database.get_students_with_data()
+        # Get total count with filters
+        total_count = database.get_total_student_count(
+            name_filter=name,
+            major_filter=major,
+            school_filter=school,
+            term_filter=term
+        )
 
-        # Apply filters if provided
-        if name:
-            students = [s for s in students if name.lower() in s['name'].lower()]
-
-        if major:
-            students = [s for s in students if s['major'] and major.lower() in s['major'].lower()]
-
-        if school:
-            students = [s for s in students if s['school'] and school.lower() in s['school'].lower()]
-
-        if term:
-            students = [s for s in students if s['term'] and term == s['term']]
-
-        total_count = len(students)
-
-        # Apply pagination
-        paginated_students = students[offset:offset + limit]
+        # Get paginated students with filters
+        students = database.get_students_with_data(
+            limit=limit,
+            offset=offset,
+            name_filter=name,
+            major_filter=major,
+            school_filter=school,
+            term_filter=term
+        )
 
         return {
-            "count": len(paginated_students),
+            "count": len(students),
             "total": total_count,
             "offset": offset,
             "limit": limit,
             "has_more": offset + limit < total_count,
-            "students": paginated_students
+            "students": students
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -116,7 +115,8 @@ def save_master_data(uid: str, master_data: MasterDataCreate):
 def get_unique_majors():
     """Get list of unique majors for filter dropdown"""
     try:
-        students = database.get_students_with_data()
+        # Fetch without limit to get all unique values
+        students = database.get_students_with_data(limit=None, offset=None)
         majors = sorted(set(s['major'] for s in students if s['major']))
         return {"majors": majors}
     except Exception as e:
@@ -126,7 +126,8 @@ def get_unique_majors():
 def get_unique_schools():
     """Get list of unique schools for filter dropdown"""
     try:
-        students = database.get_students_with_data()
+        # Fetch without limit to get all unique values
+        students = database.get_students_with_data(limit=None, offset=None)
         schools = sorted(set(s['school'] for s in students if s['school']))
         return {"schools": schools}
     except Exception as e:
@@ -136,7 +137,8 @@ def get_unique_schools():
 def get_unique_terms():
     """Get list of unique terms for filter dropdown"""
     try:
-        students = database.get_students_with_data()
+        # Fetch without limit to get all unique values
+        students = database.get_students_with_data(limit=None, offset=None)
         terms = sorted(set(s['term'] for s in students if s['term']), reverse=True)
         return {"terms": terms}
     except Exception as e:

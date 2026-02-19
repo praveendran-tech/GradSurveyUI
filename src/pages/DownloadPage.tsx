@@ -23,6 +23,13 @@ import { unparse } from 'papaparse';
 import { Header } from '../components/Header';
 import { api } from '../api';
 import type { Student } from '../types';
+import {
+  SCHOOLS,
+  MAJORS,
+  SCHOOL_CODE_TO_NAME,
+  MAJOR_COMPOUND_TO_NAME,
+  MAJOR_CODE_TO_NAME,
+} from '../majorData';
 
 export const DownloadPage: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -48,10 +55,13 @@ export const DownloadPage: React.FC = () => {
     fetchStudents();
   }, []);
 
-  // Extract unique values for filters
-  const majors = Array.from(new Set(students.map((s: Student) => s.major))).sort();
-  const schools = Array.from(new Set(students.map((s: Student) => s.school))).sort();
+  // Terms derived from actual data; schools/majors come from static canonical list
   const terms = Array.from(new Set(students.map((s: Student) => s.term))).sort();
+
+  // Majors filtered by selected school (or all if none selected)
+  const availableMajors = selectedSchool === 'all'
+    ? MAJORS
+    : MAJORS.filter((m) => m.schoolCode === selectedSchool);
 
   const handleDownload = () => {
     // Filter students based on all selections
@@ -66,8 +76,8 @@ export const DownloadPage: React.FC = () => {
     const csvData = filteredStudents.map((student: Student) => ({
       Name: student.name,
       UID: student.uid,
-      Major: student.major,
-      School: student.school,
+      Major: MAJOR_COMPOUND_TO_NAME[`${student.school}|${student.major}`] ?? MAJOR_CODE_TO_NAME[student.major] ?? student.major,
+      School: SCHOOL_CODE_TO_NAME[student.school] ?? student.school,
       Term: student.term,
       'Has Qualtrics Data': student.qualtrics_data && student.qualtrics_data.length > 0 ? 'Yes' : 'No',
       'Has LinkedIn Data': student.linkedin_data && student.linkedin_data.length > 0 ? 'Yes' : 'No',
@@ -193,37 +203,50 @@ export const DownloadPage: React.FC = () => {
 
             <Stack spacing={3}>
               <FormControl fullWidth>
-                <InputLabel>Major</InputLabel>
+                <InputLabel>School</InputLabel>
                 <Select
-                  value={selectedMajor}
-                  label="Major"
-                  onChange={(e) => setSelectedMajor(e.target.value)}
+                  value={selectedSchool}
+                  label="School"
+                  onChange={(e) => {
+                    const school = e.target.value;
+                    setSelectedSchool(school);
+                    // Clear major if it doesn't belong to the new school
+                    const majorStillValid = school === 'all' ||
+                      MAJORS.some((m) => m.schoolCode === school && m.code === selectedMajor);
+                    if (!majorStillValid) setSelectedMajor('all');
+                  }}
+                  renderValue={(val) => val === 'all' ? 'All Schools' : (SCHOOL_CODE_TO_NAME[val] ?? val)}
                 >
-                  <MenuItem value="all">
-                    <em>All Majors</em>
-                  </MenuItem>
-                  {majors.map((major) => (
-                    <MenuItem key={major} value={major}>
-                      {major}
-                    </MenuItem>
+                  <MenuItem value="all"><em>All Schools</em></MenuItem>
+                  {SCHOOLS.map((s) => (
+                    <MenuItem key={s.code} value={s.code}>{s.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
 
               <FormControl fullWidth>
-                <InputLabel>School</InputLabel>
+                <InputLabel>Major</InputLabel>
                 <Select
-                  value={selectedSchool}
-                  label="School"
-                  onChange={(e) => setSelectedSchool(e.target.value)}
+                  value={selectedMajor}
+                  label="Major"
+                  onChange={(e) => {
+                    const major = e.target.value;
+                    setSelectedMajor(major);
+                    // Auto-select school when major is chosen
+                    if (major !== 'all') {
+                      const entry = MAJORS.find((m) => m.code === major);
+                      if (entry) setSelectedSchool(entry.schoolCode);
+                    }
+                  }}
+                  renderValue={(val) => {
+                    if (val === 'all') return 'All Majors';
+                    const entry = MAJORS.find((m) => m.code === val);
+                    return entry ? entry.name : val;
+                  }}
                 >
-                  <MenuItem value="all">
-                    <em>All Schools</em>
-                  </MenuItem>
-                  {schools.map((school) => (
-                    <MenuItem key={school} value={school}>
-                      {school}
-                    </MenuItem>
+                  <MenuItem value="all"><em>All Majors</em></MenuItem>
+                  {availableMajors.map((m) => (
+                    <MenuItem key={`${m.schoolCode}-${m.code}`} value={m.code}>{m.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -255,18 +278,18 @@ export const DownloadPage: React.FC = () => {
                 Active Filters:
               </Typography>
               <Box display="flex" gap={1} flexWrap="wrap">
-                {selectedMajor !== 'all' && (
+                {selectedSchool !== 'all' && (
                   <Chip
-                    label={`Major: ${selectedMajor}`}
-                    onDelete={() => setSelectedMajor('all')}
+                    label={`School: ${SCHOOL_CODE_TO_NAME[selectedSchool] ?? selectedSchool}`}
+                    onDelete={() => { setSelectedSchool('all'); setSelectedMajor('all'); }}
                     color="primary"
                     variant="outlined"
                   />
                 )}
-                {selectedSchool !== 'all' && (
+                {selectedMajor !== 'all' && (
                   <Chip
-                    label={`School: ${selectedSchool.substring(0, 30)}...`}
-                    onDelete={() => setSelectedSchool('all')}
+                    label={`Major: ${MAJORS.find((m) => m.code === selectedMajor)?.name ?? selectedMajor}`}
+                    onDelete={() => setSelectedMajor('all')}
                     color="primary"
                     variant="outlined"
                   />

@@ -701,7 +701,7 @@ export const LandingPage: React.FC = () => {
                 fontSize: '0.85rem',
               }}
             >
-              Made with ❤️ by Pranav Raveendran
+              Made with ❤️ by Pranav Raveendran(Assesment's GA 24-26)
             </Typography>
           </Box>
         </Container>

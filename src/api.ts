@@ -40,7 +40,16 @@ export const api = {
       throw new Error(`Failed to fetch students: ${response.statusText}`);
     }
 
-    return response.json();
+    const data: GetStudentsResponse = await response.json();
+    // Normalize null source arrays to empty arrays so demographics-only
+    // students still render as valid student cards
+    data.students = data.students.map((s) => ({
+      ...s,
+      qualtrics_data: s.qualtrics_data ?? [],
+      linkedin_data: s.linkedin_data ?? [],
+      clearinghouse_data: s.clearinghouse_data ?? [],
+    }));
+    return data;
   },
 
   /**
@@ -53,7 +62,13 @@ export const api = {
       throw new Error(`Failed to fetch student: ${response.statusText}`);
     }
 
-    return response.json();
+    const student: Student = await response.json();
+    return {
+      ...student,
+      qualtrics_data: student.qualtrics_data ?? [],
+      linkedin_data: student.linkedin_data ?? [],
+      clearinghouse_data: student.clearinghouse_data ?? [],
+    };
   },
 
   /**

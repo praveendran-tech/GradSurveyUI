@@ -15,6 +15,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import type { Student, MasterData } from '../types';
+import { MAJOR_COMPOUND_TO_NAME, MAJOR_CODE_TO_NAME, SCHOOL_CODE_TO_NAME } from '../majorData';
 import { DataSourceCard } from './DataSourceCard';
 import { AddManuallyDialog } from './AddManuallyDialog';
 import { EditMasterDialog } from './EditMasterDialog';
@@ -167,7 +168,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                   UID: <strong style={{ color: '#2C2C2C' }}>{student.uid}</strong>
                 </Typography>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                  {student.major}
+                  {MAJOR_COMPOUND_TO_NAME[`${student.school}|${student.major}`] ?? MAJOR_CODE_TO_NAME[student.major] ?? student.major}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>
                   {student.term}
@@ -180,7 +181,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                 mt={1}
                 sx={{ opacity: 0.7 }}
               >
-                {student.school}
+                {SCHOOL_CODE_TO_NAME[student.school] ?? student.school}
               </Typography>
 
               {/* Data availability indicators */}
