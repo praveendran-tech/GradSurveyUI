@@ -4,13 +4,26 @@ import {
   TextField,
   Paper,
   Typography,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+  OutlinedInput,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material/Select';
 import type { FilterValues } from '../types';
 
 interface FilterBarProps {
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
 }
+
+const SOURCE_OPTIONS = [
+  { value: 'qualtrics', label: 'Qualtrics', color: '#1976D2' },
+  { value: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
+  { value: 'clearinghouse', label: 'ClearingHouse', color: '#4CAF50' },
+];
 
 export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange }) => {
   const handleChange = (field: keyof FilterValues) => (
@@ -19,6 +32,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange })
     onFilterChange({
       ...filters,
       [field]: event.target.value,
+    });
+  };
+
+  const handleSourcesChange = (event: SelectChangeEvent<string[]>) => {
+    const value = event.target.value;
+    onFilterChange({
+      ...filters,
+      sources: typeof value === 'string' ? value.split(',') : value,
     });
   };
 
@@ -123,6 +144,54 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange })
             onChange={handleChange('term')}
             size="small"
           />
+        </Box>
+        <Box flex="1 1 250px">
+          <FormControl fullWidth size="small">
+            <InputLabel id="sources-label">Data Sources</InputLabel>
+            <Select
+              labelId="sources-label"
+              multiple
+              value={filters.sources}
+              onChange={handleSourcesChange}
+              input={<OutlinedInput label="Data Sources" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((value) => {
+                    const option = SOURCE_OPTIONS.find(opt => opt.value === value);
+                    return (
+                      <Chip
+                        key={value}
+                        label={option?.label}
+                        size="small"
+                        sx={{
+                          background: `linear-gradient(135deg, ${option?.color} 0%, ${option?.color}DD 100%)`,
+                          color: 'white',
+                          fontSize: '0.7rem',
+                          height: 24,
+                        }}
+                      />
+                    );
+                  })}
+                </Box>
+              )}
+            >
+              {SOURCE_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        background: option.color,
+                      }}
+                    />
+                    {option.label}
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Box>
       </Box>
     </Paper>

@@ -1,16 +1,41 @@
 export interface Student {
-  id: string;
-  name: string;
   uid: string;
+  name: string;
+  email: string;
   major: string;
   school: string;
   term: string;
-  qualtricsData?: QualtricsData;
-  linkedInData?: LinkedInData;
-  clearingHouseData?: ClearingHouseData;
+  qualtrics_data?: QualtricsResponse[];
+  linkedin_data?: LinkedInPosition[];
+  clearinghouse_data?: ClearingHouseRecord[];
   masterData?: MasterData;
 }
 
+// Raw data from database - payload contains actual data
+export interface QualtricsResponse {
+  id: number;
+  survey_id: string;
+  response_id: string;
+  recorded_at: string;
+  payload: Record<string, any>; // JSONB field with survey responses
+  source_file: string;
+}
+
+export interface LinkedInPosition {
+  id: number;
+  position_key: string;
+  payload: Record<string, any>; // JSONB field with LinkedIn data
+  source_file: string;
+}
+
+export interface ClearingHouseRecord {
+  id: number;
+  record_key: string;
+  payload: Record<string, any>; // JSONB field with enrollment data
+  source_file: string;
+}
+
+// Legacy interfaces for backward compatibility with existing components
 export interface QualtricsData {
   id: string;
   surveyId: string;
@@ -67,4 +92,5 @@ export interface FilterValues {
   major: string;
   school: string;
   term: string;
+  sources: string[]; // Multiple selection: 'qualtrics', 'linkedin', 'clearinghouse'
 }

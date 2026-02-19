@@ -10,12 +10,16 @@ import {
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import type { QualtricsData, LinkedInData, ClearingHouseData } from '../types';
+import type {
+  QualtricsResponse,
+  LinkedInPosition,
+  ClearingHouseRecord
+} from '../types';
 import { ViewDetailDialog } from './ViewDetailDialog';
 
 interface DataSourceCardProps {
   type: 'qualtrics' | 'linkedin' | 'clearinghouse';
-  data: QualtricsData | LinkedInData | ClearingHouseData;
+  data: QualtricsResponse | LinkedInPosition | ClearingHouseRecord;
   onSelect: (type: 'qualtrics' | 'linkedin' | 'clearinghouse') => void;
   isSelected?: boolean;
 }
@@ -53,14 +57,29 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
   const getSummary = () => {
     switch (type) {
       case 'qualtrics':
-        const qualtricsData = data as QualtricsData;
-        return `Survey ID: ${qualtricsData.surveyId}`;
+        const qualtricsData = data as QualtricsResponse;
+        return `Survey ID: ${qualtricsData.survey_id || 'N/A'}`;
       case 'linkedin':
-        const linkedInData = data as LinkedInData;
-        return `${linkedInData.positions.length} position(s), ${linkedInData.education.length} education record(s)`;
+        const linkedInData = data as LinkedInPosition;
+        const linkedinUrl = linkedInData.payload?.linkedin_url || linkedInData.payload?.url || linkedInData.payload?.profile_url;
+        return `URL: ${linkedinUrl || 'N/A'}`;
       case 'clearinghouse':
-        const clearingHouseData = data as ClearingHouseData;
-        return `${clearingHouseData.enrollmentRecords.length} enrollment record(s)`;
+        const clearingHouseData = data as ClearingHouseRecord;
+        const collegeName = clearingHouseData.payload?.['College Name'] ||
+                           clearingHouseData.payload?.college_name ||
+                           clearingHouseData.payload?.institution ||
+                           clearingHouseData.payload?.school;
+        const enrollmentMajor = clearingHouseData.payload?.['Enrollment Major 1'] ||
+                               clearingHouseData.payload?.enrollment_major_1 ||
+                               clearingHouseData.payload?.major ||
+                               clearingHouseData.payload?.program ||
+                               clearingHouseData.payload?.degree_major;
+
+        const parts = [];
+        if (collegeName) parts.push(`College Name: ${collegeName}`);
+        if (enrollmentMajor) parts.push(`Enrollment Major 1: ${enrollmentMajor}`);
+
+        return parts.length > 0 ? parts.join(' | ') : 'N/A';
     }
   };
 
@@ -122,7 +141,9 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
             {getSummary()}
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Sourced: {new Date(data.sourcedTime).toLocaleString()}
+            {type === 'qualtrics'
+              ? `Recorded: ${new Date((data as QualtricsResponse).recorded_at).toLocaleString()}`
+              : `Source: ${(data as LinkedInPosition | ClearingHouseRecord).source_file}`}
           </Typography>
         </CardContent>
         <CardActions sx={{ justifyContent: 'space-between', px: 2, pb: 2 }}>

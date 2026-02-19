@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -15,28 +14,48 @@ import {
   Divider,
   Chip,
   Stack,
+  CircularProgress,
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { unparse } from 'papaparse';
 import { Header } from '../components/Header';
-import { mockStudents } from '../mockData';
+import { api } from '../api';
+import type { Student } from '../types';
 
 export const DownloadPage: React.FC = () => {
-  const navigate = useNavigate();
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
   const [selectedTerm, setSelectedTerm] = useState<string>('all');
 
+  // Fetch all students from API (no pagination for download page)
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        setLoading(true);
+        // Fetch all students by using a large limit
+        const data = await api.getStudents({ limit: 10000, offset: 0 });
+        setStudents(data.students);
+      } catch (err) {
+        console.error('Error fetching students:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStudents();
+  }, []);
+
   // Extract unique values for filters
-  const majors = Array.from(new Set(mockStudents.map((s) => s.major))).sort();
-  const schools = Array.from(new Set(mockStudents.map((s) => s.school))).sort();
-  const terms = Array.from(new Set(mockStudents.map((s) => s.term))).sort();
+  const majors = Array.from(new Set(students.map((s: Student) => s.major))).sort();
+  const schools = Array.from(new Set(students.map((s: Student) => s.school))).sort();
+  const terms = Array.from(new Set(students.map((s: Student) => s.term))).sort();
 
   const handleDownload = () => {
     // Filter students based on all selections
-    let filteredStudents = mockStudents.filter((student) => {
+    let filteredStudents = students.filter((student: Student) => {
       const matchesMajor = selectedMajor === 'all' || student.major === selectedMajor;
       const matchesSchool = selectedSchool === 'all' || student.school === selectedSchool;
       const matchesTerm = selectedTerm === 'all' || student.term === selectedTerm;
@@ -44,15 +63,15 @@ export const DownloadPage: React.FC = () => {
     });
 
     // Prepare data for CSV export
-    const csvData = filteredStudents.map((student) => ({
+    const csvData = filteredStudents.map((student: Student) => ({
       Name: student.name,
       UID: student.uid,
       Major: student.major,
       School: student.school,
       Term: student.term,
-      'Has Qualtrics Data': student.qualtricsData ? 'Yes' : 'No',
-      'Has LinkedIn Data': student.linkedInData ? 'Yes' : 'No',
-      'Has ClearingHouse Data': student.clearingHouseData ? 'Yes' : 'No',
+      'Has Qualtrics Data': student.qualtrics_data && student.qualtrics_data.length > 0 ? 'Yes' : 'No',
+      'Has LinkedIn Data': student.linkedin_data && student.linkedin_data.length > 0 ? 'Yes' : 'No',
+      'Has ClearingHouse Data': student.clearinghouse_data && student.clearinghouse_data.length > 0 ? 'Yes' : 'No',
       'In Master Database': student.masterData ? 'Yes' : 'No',
       'Selected Source': student.masterData?.selectedSource || 'N/A',
       'Employment Status': student.masterData?.employmentStatus || 'N/A',
@@ -90,7 +109,7 @@ export const DownloadPage: React.FC = () => {
   };
 
   const getFilteredCount = () => {
-    return mockStudents.filter((student) => {
+    return students.filter((student: Student) => {
       const matchesMajor = selectedMajor === 'all' || student.major === selectedMajor;
       const matchesSchool = selectedSchool === 'all' || student.school === selectedSchool;
       const matchesTerm = selectedTerm === 'all' || student.term === selectedTerm;

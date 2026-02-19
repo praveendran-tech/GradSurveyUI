@@ -30,7 +30,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     <Box>
       {students.map((student) => (
         <StudentCard
-          key={student.id}
+          key={student.uid}
           student={student}
           onSelectSource={onSelectSource}
           onAddManual={onAddManual}

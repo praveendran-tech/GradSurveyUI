@@ -60,7 +60,9 @@ export const StudentCard: React.FC<StudentCardProps> = ({
     setExpanded(!expanded);
   };
 
-  const hasData = student.qualtricsData || student.linkedInData || student.clearingHouseData;
+  const hasData = (student.qualtrics_data && student.qualtrics_data.length > 0) ||
+                  (student.linkedin_data && student.linkedin_data.length > 0) ||
+                  (student.clearinghouse_data && student.clearinghouse_data.length > 0);
   const hasMasterData = student.masterData !== undefined;
 
   return (
@@ -183,7 +185,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
 
               {/* Data availability indicators */}
               <Box display="flex" gap={1} mt={2} flexWrap="wrap">
-                {student.qualtricsData && (
+                {student.qualtrics_data && student.qualtrics_data.length > 0 && (
                   <Chip
                     label="Qualtrics"
                     size="small"
@@ -195,7 +197,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                     }}
                   />
                 )}
-                {student.linkedInData && (
+                {student.linkedin_data && student.linkedin_data.length > 0 && (
                   <Chip
                     label="LinkedIn"
                     size="small"
@@ -207,7 +209,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                     }}
                   />
                 )}
-                {student.clearingHouseData && (
+                {student.clearinghouse_data && student.clearinghouse_data.length > 0 && (
                   <Chip
                     label="ClearingHouse"
                     size="small"
@@ -278,32 +280,32 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                   gap={3}
                   sx={{ mb: 3 }}
                 >
-                  {student.qualtricsData && (
+                  {student.qualtrics_data && student.qualtrics_data.length > 0 && (
                     <Box sx={{ animation: `${slideDown} 0.6s ease-out` }}>
                       <DataSourceCard
                         type="qualtrics"
-                        data={student.qualtricsData}
-                        onSelect={() => onSelectSource(student.id, 'qualtrics')}
+                        data={student.qualtrics_data[0]}
+                        onSelect={() => onSelectSource(student.uid, 'qualtrics')}
                         isSelected={student.masterData?.selectedSource === 'qualtrics'}
                       />
                     </Box>
                   )}
-                  {student.linkedInData && (
+                  {student.linkedin_data && student.linkedin_data.length > 0 && (
                     <Box sx={{ animation: `${slideDown} 0.7s ease-out` }}>
                       <DataSourceCard
                         type="linkedin"
-                        data={student.linkedInData}
-                        onSelect={() => onSelectSource(student.id, 'linkedin')}
+                        data={student.linkedin_data[0]}
+                        onSelect={() => onSelectSource(student.uid, 'linkedin')}
                         isSelected={student.masterData?.selectedSource === 'linkedin'}
                       />
                     </Box>
                   )}
-                  {student.clearingHouseData && (
+                  {student.clearinghouse_data && student.clearinghouse_data.length > 0 && (
                     <Box sx={{ animation: `${slideDown} 0.8s ease-out` }}>
                       <DataSourceCard
                         type="clearinghouse"
-                        data={student.clearingHouseData}
-                        onSelect={() => onSelectSource(student.id, 'clearinghouse')}
+                        data={student.clearinghouse_data[0]}
+                        onSelect={() => onSelectSource(student.uid, 'clearinghouse')}
                         isSelected={student.masterData?.selectedSource === 'clearinghouse'}
                       />
                     </Box>
@@ -381,14 +383,14 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       <AddManuallyDialog
         open={addManualOpen}
         onClose={() => setAddManualOpen(false)}
-        onSave={(data) => onAddManual(student.id, data)}
-        studentId={student.id}
+        onSave={(data) => onAddManual(student.uid, data)}
+        studentId={student.uid}
       />
 
       <EditMasterDialog
         open={editMasterOpen}
         onClose={() => setEditMasterOpen(false)}
-        onSave={(data) => onEditMaster(student.id, data)}
+        onSave={(data) => onEditMaster(student.uid, data)}
         currentData={student.masterData}
       />
     </>
