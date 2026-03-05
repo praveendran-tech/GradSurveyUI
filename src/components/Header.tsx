@@ -83,7 +83,23 @@ export const Header: React.FC = () => {
                 },
               }}
             >
-              Reports
+              Export
+            </Button>
+            <Button
+              onClick={() => navigate('/report')}
+              sx={{
+                color: 'white',
+                fontWeight: 700,
+                textTransform: 'none',
+                bgcolor: '#E21833',
+                borderRadius: 2,
+                px: 2,
+                '&:hover': {
+                  bgcolor: '#C41230',
+                },
+              }}
+            >
+              Major Reports
             </Button>
           </Stack>
         </Toolbar>

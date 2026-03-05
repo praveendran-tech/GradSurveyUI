@@ -139,4 +139,29 @@ export const api = {
     const data = await response.json();
     return data.terms;
   },
+
+  /**
+   * Fetch aggregated report statistics (JSON preview)
+   */
+  async getReportData(params: { major?: string; school?: string; term?: string }): Promise<Record<string, unknown>> {
+    const q = new URLSearchParams();
+    if (params.major) q.append('major', params.major);
+    if (params.school) q.append('school', params.school);
+    if (params.term) q.append('term', params.term);
+    const url = `${API_BASE_URL}/report/data${q.toString() ? '?' + q.toString() : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch report data: ${response.statusText}`);
+    return response.json();
+  },
+
+  /**
+   * Build the download URL for a DOCX report (returns URL string, not a fetch)
+   */
+  getReportDownloadUrl(params: { major?: string; school?: string; term?: string }): string {
+    const q = new URLSearchParams();
+    if (params.major) q.append('major', params.major);
+    if (params.school) q.append('school', params.school);
+    if (params.term) q.append('term', params.term);
+    return `${API_BASE_URL}/report/download${q.toString() ? '?' + q.toString() : ''}`;
+  },
 };

@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import database
+import report as report_module
 from datetime import datetime
+import io
 
 app = FastAPI(title="Graduate Outcomes Data Management API")
 
@@ -143,6 +146,53 @@ def get_unique_terms():
         return {"terms": terms}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/api/report/data")
+def get_report_data(
+    major: Optional[str] = None,
+    school: Optional[str] = None,
+    term: Optional[str] = None,
+):
+    """Return aggregated JSON statistics for the report preview."""
+    try:
+        data = report_module.aggregate_report_data(
+            major_filter=major,
+            school_filter=school,
+            term_filter=term,
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report error: {str(e)}")
+
+
+@app.get("/api/report/download")
+def download_report(
+    major: Optional[str] = None,
+    school: Optional[str] = None,
+    term: Optional[str] = None,
+):
+    """Generate and stream a DOCX report file."""
+    try:
+        data = report_module.aggregate_report_data(
+            major_filter=major,
+            school_filter=school,
+            term_filter=term,
+        )
+        docx_bytes = report_module.generate_report_docx(data)
+
+        major_part = (major or "AllMajors").replace(" ", "_")
+        term_part = (term or "AllTerms").replace(" ", "_")
+        date_part = datetime.now().strftime("%Y%m%d")
+        filename = f"GradOutcomesReport_{major_part}_{term_part}_{date_part}.docx"
+
+        return StreamingResponse(
+            io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation error: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

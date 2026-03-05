@@ -19,6 +19,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import SecurityIcon from '@mui/icons-material/Security';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ArticleIcon from '@mui/icons-material/Article';
 import { Header } from '../components/Header';
 import smallerLogo from '/Smaller_logo-0ftU-IPl.png';
 
@@ -279,6 +280,31 @@ export const LandingPage: React.FC = () => {
                 >
                   Download Reports
                 </Button>
+                <Button
+                  variant="contained"
+                  size="large"
+                  startIcon={<AssessmentIcon />}
+                  onClick={() => navigate('/report')}
+                  sx={{
+                    py: 2,
+                    px: 4,
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #FFD200 0%, #FFC107 100%)',
+                    color: '#000',
+                    boxShadow: '0 10px 30px rgba(255, 210, 0, 0.4)',
+                    textTransform: 'none',
+                    borderRadius: 2,
+                    '&:hover': {
+                      transform: 'translateY(-3px)',
+                      boxShadow: '0 15px 40px rgba(255, 210, 0, 0.5)',
+                      background: 'linear-gradient(135deg, #FFC107 0%, #FFB300 100%)',
+                    },
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                >
+                  Generate Report
+                </Button>
               </Stack>
 
               {/* Trust indicators */}
@@ -392,12 +418,14 @@ export const LandingPage: React.FC = () => {
           {/* Feature 1 */}
           <Card
             elevation={0}
+            onClick={() => navigate('/manage')}
             sx={{
               height: '100%',
               background: 'white',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 3,
+              cursor: 'pointer',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               animation: `${fadeInUp} 0.8s ease-out 0.2s both`,
               '&:hover': {
@@ -437,12 +465,14 @@ export const LandingPage: React.FC = () => {
           {/* Feature 2 */}
           <Card
             elevation={0}
+            onClick={() => navigate('/manage')}
             sx={{
               height: '100%',
               background: 'white',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 3,
+              cursor: 'pointer',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               animation: `${fadeInUp} 0.8s ease-out 0.4s both`,
               '&:hover': {
@@ -482,12 +512,14 @@ export const LandingPage: React.FC = () => {
           {/* Feature 3 */}
           <Card
             elevation={0}
+            onClick={() => navigate('/download')}
             sx={{
               height: '100%',
               background: 'white',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 3,
+              cursor: 'pointer',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               animation: `${fadeInUp} 0.8s ease-out 0.6s both`,
               '&:hover': {
@@ -527,12 +559,14 @@ export const LandingPage: React.FC = () => {
           {/* Feature 4 */}
           <Card
             elevation={0}
+            onClick={() => navigate('/manage')}
             sx={{
               height: '100%',
               background: 'white',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 3,
+              cursor: 'pointer',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               animation: `${fadeInUp} 0.8s ease-out 0.8s both`,
               '&:hover': {
@@ -572,12 +606,14 @@ export const LandingPage: React.FC = () => {
           {/* Feature 5 */}
           <Card
             elevation={0}
+            onClick={() => navigate('/manage')}
             sx={{
               height: '100%',
               background: 'white',
               border: '1px solid',
               borderColor: 'divider',
               borderRadius: 3,
+              cursor: 'pointer',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               animation: `${fadeInUp} 0.8s ease-out 1s both`,
               '&:hover': {
@@ -610,6 +646,53 @@ export const LandingPage: React.FC = () => {
               <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 Beautiful, responsive interface designed for efficiency. Manage thousands of records
                 with ease and precision.
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Feature 6 — Major Reports */}
+          <Card
+            elevation={0}
+            onClick={() => navigate('/report')}
+            sx={{
+              height: '100%',
+              background: 'white',
+              border: '2px solid',
+              borderColor: 'rgba(226, 24, 51, 0.2)',
+              borderRadius: 3,
+              cursor: 'pointer',
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              animation: `${fadeInUp} 0.8s ease-out 1.2s both`,
+              '&:hover': {
+                transform: 'translateY(-8px)',
+                boxShadow: '0 20px 60px rgba(226, 24, 51, 0.15)',
+                borderColor: '#E21833',
+                background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.04) 0%, white 100%)',
+              },
+            }}
+          >
+            <CardContent sx={{ p: 4 }}>
+              <Box
+                sx={{
+                  width: 70,
+                  height: 70,
+                  borderRadius: 3,
+                  background: 'linear-gradient(135deg, #E21833 0%, #C41230 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mb: 3,
+                  boxShadow: '0 10px 30px rgba(226, 24, 51, 0.3)',
+                }}
+              >
+                <ArticleIcon sx={{ fontSize: 35, color: 'white' }} />
+              </Box>
+              <Typography variant="h5" gutterBottom fontWeight={700} color="#1E293B">
+                Major Reports
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                Generate comprehensive, publication-ready DOCX reports per major — covering
+                outcomes, salary, geography, internships, and more, in the official UMD format.
               </Typography>
             </CardContent>
           </Card>
