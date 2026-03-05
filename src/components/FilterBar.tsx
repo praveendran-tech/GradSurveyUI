@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -18,6 +18,7 @@ import { SCHOOLS, MAJORS, SCHOOL_CODE_TO_NAME } from '../majorData';
 interface FilterBarProps {
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
+  termOptions: string[];
 }
 
 const SOURCE_OPTIONS = [
@@ -27,18 +28,17 @@ const SOURCE_OPTIONS = [
   { value: 'no-source', label: 'No Source', color: '#9E9E9E' },
 ];
 
-const TERM_OPTIONS = [
-  '202501', '202508', '202412', '202408', '202401',
-  '202312', '202308', '202301', '202212', '202208', '202201',
-  '202112', '202108', '202101',
-];
+export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, termOptions }) => {
+  // Local state for text inputs — committed to parent on Enter or blur
+  const [localName, setLocalName] = useState(filters.name);
+  const [localUid, setLocalUid] = useState(filters.uid);
 
-export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange }) => {
-  const handleTextField = (field: keyof FilterValues) => (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    onFilterChange({ ...filters, [field]: event.target.value });
-  };
+  // Keep local values in sync when parent resets filters
+  useEffect(() => { setLocalName(filters.name); }, [filters.name]);
+  useEffect(() => { setLocalUid(filters.uid); }, [filters.uid]);
+
+  const commitName = () => onFilterChange({ ...filters, name: localName });
+  const commitUid = () => onFilterChange({ ...filters, uid: localUid });
 
   const handleSelect = (field: keyof FilterValues) => (event: SelectChangeEvent<string>) => {
     const value = event.target.value;
@@ -145,8 +145,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange })
             fullWidth
             label="Name"
             variant="outlined"
-            value={filters.name}
-            onChange={handleTextField('name')}
+            value={localName}
+            onChange={(e) => setLocalName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => e.key === 'Enter' && commitName()}
             size="small"
             sx={fieldSx}
           />
@@ -158,8 +160,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange })
             fullWidth
             label="UID"
             variant="outlined"
-            value={filters.uid}
-            onChange={handleTextField('uid')}
+            value={localUid}
+            onChange={(e) => setLocalUid(e.target.value)}
+            onBlur={commitUid}
+            onKeyDown={(e) => e.key === 'Enter' && commitUid()}
             size="small"
             sx={fieldSx}
           />
@@ -220,7 +224,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange })
               onChange={handleSelect('term')}
             >
               <MenuItem value=""><em>All Terms</em></MenuItem>
-              {TERM_OPTIONS.map((t) => (
+              {termOptions.map((t) => (
                 <MenuItem key={t} value={t}>{t}</MenuItem>
               ))}
             </Select>

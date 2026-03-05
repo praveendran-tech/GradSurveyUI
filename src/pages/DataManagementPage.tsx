@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -79,11 +79,29 @@ export const DataManagementPage = () => {
     term: '',
     sources: [],
   });
+  const [termOptions, setTermOptions] = useState<string[]>([]);
 
   const PAGE_SIZE = 20;
 
-  // Fetch students from API - refetch when filters or page changes
+  // Stable serialised key for sources array — avoids array-reference comparison issues in deps
+  const sourcesKey = filters.sources.join(',');
+
   useEffect(() => {
+    api.getTerms().then(setTermOptions).catch(() => {});
+  }, []);
+
+  // Reset page to 1 whenever any filter value changes
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setCurrentPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.name, filters.major, filters.school, filters.term, filters.uid, sourcesKey]);
+
+  // Fetch students — uses AbortController to cancel stale in-flight requests
+  useEffect(() => {
+    const controller = new AbortController();
+
     const fetchStudents = async () => {
       try {
         setLoading(true);
@@ -96,24 +114,28 @@ export const DataManagementPage = () => {
           major: filters.major || undefined,
           school: filters.school || undefined,
           term: filters.term || undefined,
-        });
-        setStudents(data.students);
-        setTotalCount(data.total || data.count);
+          uid: filters.uid || undefined,
+          sources: filters.sources.length ? filters.sources : undefined,
+        }, controller.signal);
+
+        if (!controller.signal.aborted) {
+          setStudents(data.students);
+          setTotalCount(data.total || data.count);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch students');
-        console.error('Error fetching students:', err);
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch students');
+          console.error('Error fetching students:', err);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchStudents();
-  }, [filters, currentPage]);
-
-  // Reset to page 1 when server-side filters change (not uid or sources)
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters.name, filters.major, filters.school, filters.term]);
+    return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.name, filters.major, filters.school, filters.term, filters.uid, sourcesKey, currentPage]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -122,29 +144,8 @@ export const DataManagementPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const filteredStudents = useMemo(() => {
-    // Server handles name, major, school, term filtering
-    // Client only needs to filter by UID and sources (data availability)
-    return students.filter((student) => {
-      const matchesUid = !filters.uid || student.uid.includes(filters.uid);
-
-      // Source filtering: if sources are selected, student must match at least one
-      const hasNoSource =
-        (!student.qualtrics_data || student.qualtrics_data.length === 0) &&
-        (!student.linkedin_data || student.linkedin_data.length === 0) &&
-        (!student.clearinghouse_data || student.clearinghouse_data.length === 0);
-
-      const matchesSources = filters.sources.length === 0 || filters.sources.some(source => {
-        if (source === 'qualtrics') return student.qualtrics_data && student.qualtrics_data.length > 0;
-        if (source === 'linkedin') return student.linkedin_data && student.linkedin_data.length > 0;
-        if (source === 'clearinghouse') return student.clearinghouse_data && student.clearinghouse_data.length > 0;
-        if (source === 'no-source') return hasNoSource;
-        return false;
-      });
-
-      return matchesUid && matchesSources;
-    });
-  }, [students, filters.uid, filters.sources]);
+  // All filtering is now server-side; no client-side post-processing needed
+  const filteredStudents = students;
 
   const handleSelectSource = async (
     studentUid: string,
@@ -154,43 +155,15 @@ export const DataManagementPage = () => {
       const student = students.find(s => s.uid === studentUid);
       if (!student) return;
 
-      let masterData: Partial<MasterData> = {
+      // Backend fetches source data and extracts all fields intelligently
+      const result = await api.saveMasterData(studentUid, {
+        term: student.term,
         selectedSource: source,
-      };
+      });
 
-      // Extract data from the selected source
-      if (source === 'qualtrics' && student.qualtrics_data && student.qualtrics_data.length > 0) {
-        const payload = student.qualtrics_data[0].payload;
-        masterData = {
-          selectedSource: 'qualtrics',
-          employmentStatus: payload['Employment Status'] || '',
-          currentEmployer: payload['Company Name'] || payload['Graduate School'] || '',
-          currentPosition: payload['Job Title'] || payload['Degree Program'] || '',
-          enrollmentStatus: payload['Employment Status']?.includes('Graduate') ? 'enrolled' : '',
-          currentInstitution: payload['Graduate School'] || '',
-        };
-      } else if (source === 'linkedin' && student.linkedin_data && student.linkedin_data.length > 0) {
-        const payload = student.linkedin_data[0].payload;
-        masterData = {
-          selectedSource: 'linkedin',
-          employmentStatus: 'employed',
-          currentEmployer: payload['company'] || '',
-          currentPosition: payload['title'] || '',
-        };
-      } else if (source === 'clearinghouse' && student.clearinghouse_data && student.clearinghouse_data.length > 0) {
-        const payload = student.clearinghouse_data[0].payload;
-        masterData = {
-          selectedSource: 'clearinghouse',
-          employmentStatus: '',
-          enrollmentStatus: payload['status'] || '',
-          currentInstitution: payload['institution'] || '',
-        };
-      }
+      const d = result.data as Record<string, unknown>;
 
-      // Save to backend
-      await api.saveMasterData(studentUid, masterData);
-
-      // Update local state
+      // Update local state from what the backend extracted
       setStudents((prev) =>
         prev.map((s) => {
           if (s.uid === studentUid) {
@@ -198,9 +171,12 @@ export const DataManagementPage = () => {
               ...s,
               masterData: {
                 id: `m_${studentUid}`,
-                ...masterData,
                 selectedSource: source,
-                employmentStatus: masterData.employmentStatus || '',
+                currentActivity: (d.outcome_status as string) || '',
+                employmentStatus: (d.outcome_status as string) || '',
+                currentEmployer: (d.employer_name as string) || '',
+                currentPosition: (d.job_title as string) || '',
+                currentInstitution: (d.continuing_education_institution as string) || '',
                 lastUpdated: new Date().toISOString(),
               } as MasterData,
             };
@@ -210,13 +186,14 @@ export const DataManagementPage = () => {
       );
     } catch (err) {
       console.error('Error saving master data:', err);
-      alert('Failed to save master data. Please try again.');
+      alert(`Failed to save master data: ${err instanceof Error ? err.message : 'Please try again.'}`);
     }
   };
 
   const handleAddManual = async (studentUid: string, data: Partial<MasterData>) => {
     try {
-      await api.saveMasterData(studentUid, data);
+      const student = students.find(s => s.uid === studentUid);
+      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
 
       setStudents((prev) =>
         prev.map((student) => {
@@ -247,7 +224,8 @@ export const DataManagementPage = () => {
 
   const handleEditMaster = async (studentUid: string, data: Partial<MasterData>) => {
     try {
-      await api.saveMasterData(studentUid, data);
+      const student = students.find(s => s.uid === studentUid);
+      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
 
       setStudents((prev) =>
         prev.map((student) => {
@@ -499,7 +477,7 @@ export const DataManagementPage = () => {
           {/* Enhanced Filter Bar */}
           <Zoom in timeout={1000}>
             <Box sx={{ animation: `${fadeInUp} 1s ease-out 0.3s both` }}>
-              <FilterBar filters={filters} onFilterChange={setFilters} />
+              <FilterBar filters={filters} onFilterChange={setFilters} termOptions={termOptions} />
             </Box>
           </Zoom>
 

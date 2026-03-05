@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -21,15 +21,21 @@ app.add_middleware(
 
 # Pydantic models for request/response
 class MasterDataCreate(BaseModel):
-    selected_source: str
+    term: str
+    selected_source: str  # 'qualtrics' | 'linkedin' | 'clearinghouse' | 'manual'
+    # Fields used only for manual / edited entries (ignored for source-based saves)
+    outcome_status: Optional[str] = None
+    employer_name: Optional[str] = None
+    job_title: Optional[str] = None
+    continuing_education_institution: Optional[str] = None
+    military_branch: Optional[str] = None
+    military_rank: Optional[str] = None
+    # Legacy camelCase fields (frontend compat)
     current_activity: Optional[str] = None
     employment_status: Optional[str] = None
     current_employer: Optional[str] = None
     current_position: Optional[str] = None
-    enrollment_status: Optional[str] = None
     current_institution: Optional[str] = None
-    military_branch: Optional[str] = None
-    military_rank: Optional[str] = None
 
 @app.get("/")
 def read_root():
@@ -42,12 +48,14 @@ def get_all_students(
     major: Optional[str] = None,
     school: Optional[str] = None,
     term: Optional[str] = None,
+    uid: Optional[str] = None,
+    sources: Optional[List[str]] = Query(default=None),
     limit: Optional[int] = 20,
     offset: Optional[int] = 0
 ):
     """
     Get students with their associated data from all sources.
-    Optionally filter by name, major, school, or term.
+    Optionally filter by name, major, school, term, uid, or data sources.
     Supports pagination with limit and offset.
     All filtering and pagination happens at the database level for efficiency.
     """
@@ -57,7 +65,9 @@ def get_all_students(
             name_filter=name,
             major_filter=major,
             school_filter=school,
-            term_filter=term
+            term_filter=term,
+            uid_filter=uid,
+            sources_filter=sources
         )
 
         # Get paginated students with filters
@@ -67,7 +77,9 @@ def get_all_students(
             name_filter=name,
             major_filter=major,
             school_filter=school,
-            term_filter=term
+            term_filter=term,
+            uid_filter=uid,
+            sources_filter=sources
         )
 
         return {
@@ -100,52 +112,73 @@ def get_student(uid: str):
 def save_master_data(uid: str, master_data: MasterDataCreate):
     """
     Save or update master data for a student.
-    This is called when user selects a data source or manually enters data.
+    - For qualtrics/linkedin/clearinghouse: fetches source data from DB and extracts all fields.
+    - For manual: uses the fields provided in the request body.
+    Returns extracted fields so the frontend can update local state.
     """
     try:
-        # TODO: Implement master data table creation and insert/update
-        # For now, return success
-        return {
-            "message": "Master data saved successfully",
-            "uid": uid,
-            "data": master_data.dict(),
-            "last_updated": datetime.now().isoformat()
-        }
+        if master_data.selected_source in ('qualtrics', 'linkedin', 'clearinghouse'):
+            result = database.save_master_from_source(
+                student_id=uid,
+                graduation_term=master_data.term,
+                source_name=master_data.selected_source,
+            )
+        else:
+            database.save_master_record(
+                student_id=uid,
+                graduation_term=master_data.term,
+                outcome_data=master_data.dict(exclude={"term"}),
+            )
+            result = master_data.dict(exclude={"term"})
+
+        return {"message": "Master data saved successfully", "uid": uid, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving master data: {str(e)}")
 
 @app.get("/api/filters/majors")
 def get_unique_majors():
-    """Get list of unique majors for filter dropdown"""
     try:
-        # Fetch without limit to get all unique values
-        students = database.get_students_with_data(limit=None, offset=None)
-        majors = sorted(set(s['major'] for s in students if s['major']))
-        return {"majors": majors}
+        return {"majors": database.get_distinct_values("major1_major")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/api/filters/schools")
 def get_unique_schools():
-    """Get list of unique schools for filter dropdown"""
     try:
-        # Fetch without limit to get all unique values
-        students = database.get_students_with_data(limit=None, offset=None)
-        schools = sorted(set(s['school'] for s in students if s['school']))
-        return {"schools": schools}
+        return {"schools": database.get_distinct_values("major1_coll")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/api/filters/terms")
 def get_unique_terms():
-    """Get list of unique terms for filter dropdown"""
     try:
-        # Fetch without limit to get all unique values
-        students = database.get_students_with_data(limit=None, offset=None)
-        terms = sorted(set(s['term'] for s in students if s['term']), reverse=True)
-        return {"terms": terms}
+        return {"terms": database.get_distinct_terms()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/api/export")
+def export_master_records(
+    major: Optional[str] = None,
+    school: Optional[str] = None,
+    term: Optional[str] = None,
+):
+    """Return all records from analytics.master_graduate_outcomes for CSV export."""
+    try:
+        records = database.get_master_records(
+            term_filter=term,
+            major_filter=major,
+            school_filter=school,
+        )
+        # Serialise timestamps to ISO strings
+        for r in records:
+            if r.get("last_updated"):
+                r["last_updated"] = r["last_updated"].isoformat()
+        return {"count": len(records), "records": records}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")
+
 
 @app.get("/api/report/data")
 def get_report_data(

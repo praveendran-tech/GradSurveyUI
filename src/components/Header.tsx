@@ -39,7 +39,7 @@ export const Header: React.FC = () => {
               src={smallerLogo}
               alt="University of Maryland"
               style={{ height: '50px', cursor: 'pointer' }}
-              onClick={() => navigate('/')}
+              onClick={() => window.open('https://careers.umd.edu/', '_blank')}
             />
           </Box>
           <Stack direction="row" spacing={2}>
