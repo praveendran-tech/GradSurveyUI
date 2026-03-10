@@ -16,10 +16,57 @@ import CloseIcon from '@mui/icons-material/Close';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import type { MasterData } from '../types';
 
+// Maps frontend activity codes → canonical DB outcome_status values
+const ACTIVITY_TO_OUTCOME: Record<string, string> = {
+  'working':              'Employed full-time',
+  'continuing-education': 'Continuing education',
+  'military':             'Serving in the U.S. Armed Forces',
+  'entrepreneur':         'Starting a business',
+  'seeking':              'Unplaced',
+  'other':                'NOT seeking',
+};
+
+function buildPayload(formData: {
+  currentActivity: string;
+  employmentStatus: string;
+  currentEmployer: string;
+  currentPosition: string;
+  enrollmentStatus: string;
+  currentInstitution: string;
+}): Record<string, unknown> {
+  const { currentActivity, employmentStatus, currentEmployer, currentPosition, currentInstitution } = formData;
+
+  let outcome_status = ACTIVITY_TO_OUTCOME[currentActivity] || currentActivity;
+  if (currentActivity === 'working' && employmentStatus === 'part-time') {
+    outcome_status = 'Employed part-time';
+  }
+
+  const payload: Record<string, unknown> = { outcome_status, selected_source: 'manual' };
+
+  switch (currentActivity) {
+    case 'military':
+      payload.military_branch = currentEmployer || null;
+      payload.military_rank   = currentPosition || null;
+      break;
+    case 'entrepreneur':
+      payload.business_name           = currentEmployer || null;
+      payload.business_position_title = currentPosition || null;
+      break;
+    case 'continuing-education':
+      payload.continuing_education_institution = currentInstitution || null;
+      break;
+    default:
+      payload.employer_name = currentEmployer || null;
+      payload.job_title     = currentPosition || null;
+  }
+
+  return payload;
+}
+
 interface AddManuallyDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: Partial<MasterData>) => void;
+  onSave: (data: Record<string, unknown>) => void;
   studentId: string;
 }
 
@@ -40,19 +87,22 @@ export const AddManuallyDialog: React.FC<AddManuallyDialogProps> = ({
   const handleChange = (field: string) => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    setFormData({
-      ...formData,
-      [field]: event.target.value,
-    });
+    if (field === 'currentActivity') {
+      setFormData({
+        currentActivity:    event.target.value,
+        employmentStatus:   '',
+        currentEmployer:    '',
+        currentPosition:    '',
+        enrollmentStatus:   '',
+        currentInstitution: '',
+      });
+    } else {
+      setFormData({ ...formData, [field]: event.target.value });
+    }
   };
 
   const handleSave = () => {
-    const masterData: Partial<MasterData> = {
-      selectedSource: 'manual',
-      ...formData,
-      lastUpdated: new Date().toISOString(),
-    };
-    onSave(masterData);
+    onSave(buildPayload(formData));
     handleClose();
   };
 

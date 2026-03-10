@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import type { Student, MasterData } from '../types';
@@ -43,8 +44,10 @@ const slideDown = keyframes`
 interface StudentCardProps {
   student: Student;
   onSelectSource: (studentId: string, source: 'qualtrics' | 'linkedin' | 'clearinghouse') => void;
-  onAddManual: (studentId: string, data: Partial<MasterData>) => void;
-  onEditMaster: (studentId: string, data: Partial<MasterData>) => void;
+  onAddManual: (studentId: string, data: Record<string, unknown>) => void;
+  onEditMaster: (studentId: string, data: Record<string, unknown>) => void;
+  onDeleteMaster: (studentId: string) => void;
+  isSaving?: boolean;
 }
 
 export const StudentCard: React.FC<StudentCardProps> = ({
@@ -52,6 +55,8 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   onSelectSource,
   onAddManual,
   onEditMaster,
+  onDeleteMaster,
+  isSaving = false,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [addManualOpen, setAddManualOpen] = useState(false);
@@ -64,7 +69,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   const hasData = (student.qualtrics_data && student.qualtrics_data.length > 0) ||
                   (student.linkedin_data && student.linkedin_data.length > 0) ||
                   (student.clearinghouse_data && student.clearinghouse_data.length > 0);
-  const hasMasterData = student.masterData !== undefined;
+  const hasMasterData = student.masterData != null;
 
   return (
     <>
@@ -227,21 +232,38 @@ export const StudentCard: React.FC<StudentCardProps> = ({
 
             <Box display="flex" gap={1} alignItems="center">
               {hasMasterData && (
-                <IconButton
-                  color="primary"
-                  onClick={() => setEditMasterOpen(true)}
-                  size="small"
-                  sx={{
-                    background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.1) 0%, rgba(226, 24, 51, 0.05) 100%)',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.2) 0%, rgba(226, 24, 51, 0.1) 100%)',
-                      transform: 'scale(1.1) rotate(15deg)',
-                    },
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  <EditIcon />
-                </IconButton>
+                <>
+                  <IconButton
+                    color="primary"
+                    onClick={() => setEditMasterOpen(true)}
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.1) 0%, rgba(226, 24, 51, 0.05) 100%)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.2) 0%, rgba(226, 24, 51, 0.1) 100%)',
+                        transform: 'scale(1.1) rotate(15deg)',
+                      },
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    onClick={() => onDeleteMaster(student.uid)}
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, rgba(211, 47, 47, 0.1) 0%, rgba(211, 47, 47, 0.05) 100%)',
+                      color: 'error.main',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, rgba(211, 47, 47, 0.2) 0%, rgba(211, 47, 47, 0.1) 100%)',
+                        transform: 'scale(1.1)',
+                      },
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </>
               )}
               <IconButton
                 onClick={handleExpandClick}
@@ -288,6 +310,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                         data={student.qualtrics_data[0]}
                         onSelect={() => onSelectSource(student.uid, 'qualtrics')}
                         isSelected={student.masterData?.selectedSource === 'qualtrics'}
+                        disabled={isSaving}
                       />
                     </Box>
                   )}
@@ -298,6 +321,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                         data={student.linkedin_data[0]}
                         onSelect={() => onSelectSource(student.uid, 'linkedin')}
                         isSelected={student.masterData?.selectedSource === 'linkedin'}
+                        disabled={isSaving}
                       />
                     </Box>
                   )}
@@ -308,6 +332,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                         data={student.clearinghouse_data[0]}
                         onSelect={() => onSelectSource(student.uid, 'clearinghouse')}
                         isSelected={student.masterData?.selectedSource === 'clearinghouse'}
+                        disabled={isSaving}
                       />
                     </Box>
                   )}
@@ -384,14 +409,14 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       <AddManuallyDialog
         open={addManualOpen}
         onClose={() => setAddManualOpen(false)}
-        onSave={(data) => onAddManual(student.uid, data)}
+        onSave={(data: Record<string, unknown>) => onAddManual(student.uid, data)}
         studentId={student.uid}
       />
 
       <EditMasterDialog
         open={editMasterOpen}
         onClose={() => setEditMasterOpen(false)}
-        onSave={(data) => onEditMaster(student.uid, data)}
+        onSave={(data: Record<string, unknown>) => onEditMaster(student.uid, data)}
         currentData={student.masterData}
       />
     </>

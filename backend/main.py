@@ -137,6 +137,16 @@ def save_master_data(uid: str, master_data: MasterDataCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving master data: {str(e)}")
 
+@app.delete("/api/students/{uid}/master")
+def delete_master_data(uid: str, term: str):
+    """Delete the master record for a student."""
+    try:
+        database.delete_master_record(student_id=uid, graduation_term=term)
+        return {"message": "Master record deleted", "uid": uid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting master record: {str(e)}")
+
+
 @app.get("/api/filters/majors")
 def get_unique_majors():
     try:

@@ -77,27 +77,17 @@ export const api = {
 
   /**
    * Save master data for a student.
-   * For source-based saves (qualtrics/linkedin/clearinghouse), only term + selected_source needed.
-   * For manual saves, include the outcome fields.
+   * For source-based saves pass { term, selected_source }.
+   * For manual saves pass fully-mapped snake_case fields (dialogs handle mapping).
    */
   async saveMasterData(
     uid: string,
-    data: { term: string; selectedSource: string } & Partial<MasterData>
+    data: Record<string, unknown>
   ): Promise<{ message: string; uid: string; data: Record<string, unknown> }> {
     const response = await fetch(`${API_BASE_URL}/students/${uid}/master`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        term: data.term,
-        selected_source: data.selectedSource,
-        // Manual-entry fields (ignored for source-based saves)
-        outcome_status: data.currentActivity || data.employmentStatus || undefined,
-        employer_name: data.currentEmployer || undefined,
-        job_title: data.currentPosition || undefined,
-        continuing_education_institution: data.currentInstitution || undefined,
-        military_branch: (data as Record<string, unknown>).militaryBranch || undefined,
-        military_rank: (data as Record<string, unknown>).militaryRank || undefined,
-      }),
+      body: JSON.stringify(data),
     });
 
     if (!response.ok) {
@@ -106,6 +96,20 @@ export const api = {
     }
 
     return response.json();
+  },
+
+  /**
+   * Delete the master record for a student.
+   */
+  async deleteMasterData(uid: string, term: string): Promise<void> {
+    const response = await fetch(
+      `${API_BASE_URL}/students/${uid}/master?term=${encodeURIComponent(term)}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      throw new Error((detail as Record<string, string>).detail || `Failed to delete master record: ${response.statusText}`);
+    }
   },
 
   /**

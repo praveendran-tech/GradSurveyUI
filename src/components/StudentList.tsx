@@ -6,8 +6,10 @@ import { StudentCard } from './StudentCard';
 interface StudentListProps {
   students: Student[];
   onSelectSource: (studentId: string, source: 'qualtrics' | 'linkedin' | 'clearinghouse') => void;
-  onAddManual: (studentId: string, data: Partial<MasterData>) => void;
-  onEditMaster: (studentId: string, data: Partial<MasterData>) => void;
+  onAddManual: (studentId: string, data: Record<string, unknown>) => void;
+  onEditMaster: (studentId: string, data: Record<string, unknown>) => void;
+  onDeleteMaster: (studentId: string) => void;
+  savingUid: string | null;
 }
 
 export const StudentList: React.FC<StudentListProps> = ({
@@ -15,6 +17,8 @@ export const StudentList: React.FC<StudentListProps> = ({
   onSelectSource,
   onAddManual,
   onEditMaster,
+  onDeleteMaster,
+  savingUid,
 }) => {
   if (students.length === 0) {
     return (
@@ -35,6 +39,8 @@ export const StudentList: React.FC<StudentListProps> = ({
           onSelectSource={onSelectSource}
           onAddManual={onAddManual}
           onEditMaster={onEditMaster}
+          onDeleteMaster={onDeleteMaster}
+          isSaving={savingUid !== null}
         />
       ))}
     </Box>

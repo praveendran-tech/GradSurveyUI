@@ -22,6 +22,7 @@ interface DataSourceCardProps {
   data: QualtricsResponse | LinkedInPosition | ClearingHouseRecord;
   onSelect: (type: 'qualtrics' | 'linkedin' | 'clearinghouse') => void;
   isSelected?: boolean;
+  disabled?: boolean;
 }
 
 export const DataSourceCard: React.FC<DataSourceCardProps> = ({
@@ -29,6 +30,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
   data,
   onSelect,
   isSelected = false,
+  disabled = false,
 }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -158,9 +160,9 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
             variant="contained"
             size="small"
             onClick={() => onSelect(type)}
-            disabled={isSelected}
+            disabled={isSelected || disabled}
           >
-            {isSelected ? 'Selected' : 'Select'}
+            {isSelected ? 'Selected' : disabled ? 'Saving…' : 'Select'}
           </Button>
         </CardActions>
       </Card>

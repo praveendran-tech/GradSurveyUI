@@ -20,6 +20,8 @@ import { FilterBar } from '../components/FilterBar';
 import { StudentList } from '../components/StudentList';
 import { EmptyState } from '../components/EmptyState';
 import { StartFilteringState } from '../components/StartFilteringState';
+import { AlertDialog } from '../components/AlertDialog';
+import type { AlertSeverity } from '../components/AlertDialog';
 import type { FilterValues, Student, MasterData } from '../types';
 import { api } from '../api';
 
@@ -80,6 +82,19 @@ export const DataManagementPage = () => {
     sources: [],
   });
   const [termOptions, setTermOptions] = useState<string[]>([]);
+  const [savingUid, setSavingUid] = useState<string | null>(null);
+  const [alertState, setAlertState] = useState<{
+    open: boolean;
+    severity: AlertSeverity;
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+  }>({ open: false, severity: 'error', title: '', message: '' });
+
+  const showAlert = (severity: AlertSeverity, title: string, message: string, onConfirm?: () => void) => {
+    setAlertState({ open: true, severity, title, message, onConfirm });
+  };
+  const closeAlert = () => setAlertState(s => ({ ...s, open: false }));
 
   const PAGE_SIZE = 20;
 
@@ -151,9 +166,14 @@ export const DataManagementPage = () => {
     studentUid: string,
     source: 'qualtrics' | 'linkedin' | 'clearinghouse'
   ) => {
+    // Prevent concurrent saves for any student
+    if (savingUid !== null) return;
+
     try {
       const student = students.find(s => s.uid === studentUid);
       if (!student) return;
+
+      setSavingUid(studentUid);
 
       // Backend fetches source data and extracts all fields intelligently
       const result = await api.saveMasterData(studentUid, {
@@ -161,7 +181,8 @@ export const DataManagementPage = () => {
         selectedSource: source,
       });
 
-      const d = result.data as Record<string, unknown>;
+      const d = (result.data ?? {}) as Record<string, unknown>;
+      const str = (key: string) => (d[key] != null ? String(d[key]) : '');
 
       // Update local state from what the backend extracted
       setStudents((prev) =>
@@ -172,11 +193,11 @@ export const DataManagementPage = () => {
               masterData: {
                 id: `m_${studentUid}`,
                 selectedSource: source,
-                currentActivity: (d.outcome_status as string) || '',
-                employmentStatus: (d.outcome_status as string) || '',
-                currentEmployer: (d.employer_name as string) || '',
-                currentPosition: (d.job_title as string) || '',
-                currentInstitution: (d.continuing_education_institution as string) || '',
+                currentActivity: str('outcome_status'),
+                employmentStatus: str('outcome_status'),
+                currentEmployer: str('employer_name'),
+                currentPosition: str('job_title'),
+                currentInstitution: str('continuing_education_institution'),
                 lastUpdated: new Date().toISOString(),
               } as MasterData,
             };
@@ -186,66 +207,90 @@ export const DataManagementPage = () => {
       );
     } catch (err) {
       console.error('Error saving master data:', err);
-      alert(`Failed to save master data: ${err instanceof Error ? err.message : 'Please try again.'}`);
+      showAlert('error', 'Save Failed', err instanceof Error ? err.message : 'Failed to save master data. Please try again.');
+    } finally {
+      setSavingUid(null);
     }
   };
 
-  const handleAddManual = async (studentUid: string, data: Partial<MasterData>) => {
+  const handleAddManual = async (studentUid: string, data: Record<string, unknown>) => {
     try {
       const student = students.find(s => s.uid === studentUid);
       await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
-
+      const str = (k: string) => (data[k] != null ? String(data[k]) : '');
       setStudents((prev) =>
-        prev.map((student) => {
-          if (student.uid === studentUid) {
-            return {
-              ...student,
-              masterData: {
-                id: `m_${studentUid}`,
-                selectedSource: 'manual',
-                employmentStatus: data.employmentStatus || '',
-                currentEmployer: data.currentEmployer,
-                currentPosition: data.currentPosition,
-                enrollmentStatus: data.enrollmentStatus,
-                currentInstitution: data.currentInstitution,
-                currentActivity: data.currentActivity,
-                lastUpdated: new Date().toISOString(),
-              },
-            };
-          }
-          return student;
+        prev.map((s) => {
+          if (s.uid !== studentUid) return s;
+          return {
+            ...s,
+            masterData: {
+              id: `m_${studentUid}`,
+              selectedSource: 'manual',
+              currentActivity:    str('outcome_status'),
+              employmentStatus:   str('outcome_status'),
+              currentEmployer:    str('employer_name'),
+              currentPosition:    str('job_title'),
+              currentInstitution: str('continuing_education_institution'),
+              lastUpdated: new Date().toISOString(),
+            },
+          };
         })
       );
     } catch (err) {
       console.error('Error saving manual data:', err);
-      alert('Failed to save manual data. Please try again.');
+      showAlert('error', 'Save Failed', 'Failed to save manual entry. Please try again.');
     }
   };
 
-  const handleEditMaster = async (studentUid: string, data: Partial<MasterData>) => {
+  const handleEditMaster = async (studentUid: string, data: Record<string, unknown>) => {
     try {
       const student = students.find(s => s.uid === studentUid);
       await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
-
+      const str = (k: string) => (data[k] != null ? String(data[k]) : '');
       setStudents((prev) =>
-        prev.map((student) => {
-          if (student.uid === studentUid && student.masterData) {
-            return {
-              ...student,
-              masterData: {
-                ...student.masterData,
-                ...data,
-                lastUpdated: new Date().toISOString(),
-              },
-            };
-          }
-          return student;
+        prev.map((s) => {
+          if (s.uid !== studentUid || !s.masterData) return s;
+          return {
+            ...s,
+            masterData: {
+              ...s.masterData,
+              currentActivity:    str('outcome_status') || s.masterData.currentActivity,
+              employmentStatus:   str('outcome_status') || s.masterData.employmentStatus,
+              currentEmployer:    str('employer_name')  || s.masterData.currentEmployer,
+              currentPosition:    str('job_title')      || s.masterData.currentPosition,
+              currentInstitution: str('continuing_education_institution') || s.masterData.currentInstitution,
+              lastUpdated: new Date().toISOString(),
+            },
+          };
         })
       );
     } catch (err) {
       console.error('Error updating master data:', err);
-      alert('Failed to update master data. Please try again.');
+      showAlert('error', 'Update Failed', 'Failed to update master record. Please try again.');
     }
+  };
+
+  const handleDeleteMaster = (studentUid: string) => {
+    const student = students.find(s => s.uid === studentUid);
+    if (!student) return;
+    showAlert(
+      'confirm',
+      'Delete Master Record',
+      'Are you sure you want to delete this master record? This action cannot be undone.',
+      async () => {
+        closeAlert();
+        try {
+          await api.deleteMasterData(studentUid, student.term);
+          setStudents((prev) =>
+            prev.map((s) => s.uid === studentUid ? { ...s, masterData: undefined } : s)
+          );
+          showAlert('success', 'Record Deleted', 'The master record has been successfully deleted.');
+        } catch (err) {
+          console.error('Error deleting master data:', err);
+          showAlert('error', 'Delete Failed', 'Failed to delete master record. Please try again.');
+        }
+      }
+    );
   };
 
   const resetFilters = () => {
@@ -493,6 +538,8 @@ export const DataManagementPage = () => {
                     onSelectSource={handleSelectSource}
                     onAddManual={handleAddManual}
                     onEditMaster={handleEditMaster}
+                    onDeleteMaster={handleDeleteMaster}
+                    savingUid={savingUid}
                   />
 
                   {/* Pagination Controls */}
@@ -540,6 +587,15 @@ export const DataManagementPage = () => {
         </Container>
       </Box>
       )}
+
+      <AlertDialog
+        open={alertState.open}
+        severity={alertState.severity}
+        title={alertState.title}
+        message={alertState.message}
+        onClose={closeAlert}
+        onConfirm={alertState.onConfirm}
+      />
     </>
   );
 };

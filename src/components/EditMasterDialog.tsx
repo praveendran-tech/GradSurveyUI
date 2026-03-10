@@ -17,10 +17,73 @@ import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
 import type { MasterData } from '../types';
 
+const ACTIVITY_TO_OUTCOME: Record<string, string> = {
+  'working':              'Employed full-time',
+  'continuing-education': 'Continuing education',
+  'military':             'Serving in the U.S. Armed Forces',
+  'entrepreneur':         'Starting a business',
+  'seeking':              'Unplaced',
+  'other':                'NOT seeking',
+};
+
+function outcomeToActivity(status: string): string {
+  const s = (status || '').toLowerCase();
+  if (s.includes('employed full'))         return 'working';
+  if (s.includes('employed part'))         return 'working';
+  if (s.includes('continuing education'))  return 'continuing-education';
+  if (s.includes('armed forces'))          return 'military';
+  if (s.includes('business'))              return 'entrepreneur';
+  if (s.includes('unplaced') || s.includes('seeking')) return 'seeking';
+  if (s)                                   return 'other';
+  return '';
+}
+
+function outcomeToEmpStatus(status: string): string {
+  if ((status || '').toLowerCase().includes('part')) return 'part-time';
+  return 'employed';
+}
+
+function buildPayload(formData: {
+  currentActivity: string;
+  employmentStatus: string;
+  currentEmployer: string;
+  currentPosition: string;
+  enrollmentStatus: string;
+  currentInstitution: string;
+}): Record<string, unknown> {
+  const { currentActivity, employmentStatus, currentEmployer, currentPosition, currentInstitution } = formData;
+
+  let outcome_status = ACTIVITY_TO_OUTCOME[currentActivity] || currentActivity;
+  if (currentActivity === 'working' && employmentStatus === 'part-time') {
+    outcome_status = 'Employed part-time';
+  }
+
+  const payload: Record<string, unknown> = { outcome_status, selected_source: 'manual' };
+
+  switch (currentActivity) {
+    case 'military':
+      payload.military_branch = currentEmployer || null;
+      payload.military_rank   = currentPosition || null;
+      break;
+    case 'entrepreneur':
+      payload.business_name           = currentEmployer || null;
+      payload.business_position_title = currentPosition || null;
+      break;
+    case 'continuing-education':
+      payload.continuing_education_institution = currentInstitution || null;
+      break;
+    default:
+      payload.employer_name = currentEmployer || null;
+      payload.job_title     = currentPosition || null;
+  }
+
+  return payload;
+}
+
 interface EditMasterDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (data: Partial<MasterData>) => void;
+  onSave: (data: Record<string, unknown>) => void;
   currentData: MasterData | undefined;
 }
 
@@ -40,33 +103,38 @@ export const EditMasterDialog: React.FC<EditMasterDialogProps> = ({
   });
 
   useEffect(() => {
-    if (currentData) {
+    if (open && currentData) {
+      const activity = outcomeToActivity(currentData.currentActivity || currentData.employmentStatus || '');
       setFormData({
-        currentActivity: currentData.currentActivity || '',
-        employmentStatus: currentData.employmentStatus || '',
-        currentEmployer: currentData.currentEmployer || '',
-        currentPosition: currentData.currentPosition || '',
-        enrollmentStatus: currentData.enrollmentStatus || '',
+        currentActivity:   activity,
+        employmentStatus:  activity === 'working' ? outcomeToEmpStatus(currentData.currentActivity || currentData.employmentStatus || '') : '',
+        currentEmployer:   currentData.currentEmployer || '',
+        currentPosition:   currentData.currentPosition || '',
+        enrollmentStatus:  currentData.enrollmentStatus || '',
         currentInstitution: currentData.currentInstitution || '',
       });
     }
-  }, [currentData]);
+  }, [open, currentData]);
 
   const handleChange = (field: string) => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    setFormData({
-      ...formData,
-      [field]: event.target.value,
-    });
+    if (field === 'currentActivity') {
+      setFormData({
+        currentActivity:    event.target.value,
+        employmentStatus:   '',
+        currentEmployer:    '',
+        currentPosition:    '',
+        enrollmentStatus:   '',
+        currentInstitution: '',
+      });
+    } else {
+      setFormData({ ...formData, [field]: event.target.value });
+    }
   };
 
   const handleSave = () => {
-    const masterData: Partial<MasterData> = {
-      ...formData,
-      lastUpdated: new Date().toISOString(),
-    };
-    onSave(masterData);
+    onSave(buildPayload(formData));
     onClose();
   };
 
