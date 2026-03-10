@@ -178,7 +178,7 @@ export const DataManagementPage = () => {
       // Backend fetches source data and extracts all fields intelligently
       const result = await api.saveMasterData(studentUid, {
         term: student.term,
-        selectedSource: source,
+        selected_source: source,
       });
 
       const d = (result.data ?? {}) as Record<string, unknown>;
@@ -216,7 +216,7 @@ export const DataManagementPage = () => {
   const handleAddManual = async (studentUid: string, data: Record<string, unknown>) => {
     try {
       const student = students.find(s => s.uid === studentUid);
-      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
+      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '', selected_source: 'manual' });
       const str = (k: string) => (data[k] != null ? String(data[k]) : '');
       setStudents((prev) =>
         prev.map((s) => {
@@ -245,7 +245,7 @@ export const DataManagementPage = () => {
   const handleEditMaster = async (studentUid: string, data: Record<string, unknown>) => {
     try {
       const student = students.find(s => s.uid === studentUid);
-      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '' });
+      await api.saveMasterData(studentUid, { ...data, term: student?.term ?? '', selected_source: 'manual' });
       const str = (k: string) => (data[k] != null ? String(data[k]) : '');
       setStudents((prev) =>
         prev.map((s) => {

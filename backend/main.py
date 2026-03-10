@@ -183,8 +183,10 @@ def export_master_records(
         )
         # Serialise timestamps to ISO strings
         for r in records:
-            if r.get("last_updated"):
-                r["last_updated"] = r["last_updated"].isoformat()
+            if r.get("record_updated_at"):
+                r["record_updated_at"] = r["record_updated_at"].isoformat()
+            if r.get("record_created_at"):
+                r["record_created_at"] = r["record_created_at"].isoformat()
         return {"count": len(records), "records": records}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Export error: {str(e)}")

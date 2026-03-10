@@ -48,9 +48,9 @@ interface OutcomeRow { label: string; n: number }
 interface TableEntry { label?: string; n?: number; employer?: string; title?: string; institution?: string; program?: string; degree?: string }
 interface ReportData {
   meta: { major: string; school: string; term: string; generated_at: string };
-  totals: { total_graduates: number; survey_count: number; known_count: number; survey_response_rate: number; knowledge_rate: number };
+  totals: { total_graduates: number; survey_count: number; linkedin_count: number; clearinghouse_count: number; known_count: number; survey_response_rate: number; knowledge_rate: number };
   outcomes: { table: OutcomeRow[]; grand_total: number; placement_rate: number; employed_count: number; employed_pct: number };
-  nature: { respondents: number; nature_counts: Record<string, number>; field_counts: Record<string, number> };
+  nature: { respondents: number; nature_counts: Record<string, number>; field_counts: Record<string, number>; modality_counts: Record<string, number> };
   salary: { n_reported: number; n_full_time: number; bonus_count: number; p25: number; p50: number; p75: number } | null;
   emp_search: { respondents: number; table: [string, number][] };
   geography: { respondents: number; table: [string, number][] };

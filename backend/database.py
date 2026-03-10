@@ -825,14 +825,21 @@ def get_master_records(term_filter=None, major_filter=None, school_filter=None) 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f"""
-                SELECT student_id, graduation_term, full_name, email_address, primary_major,
-                       data_source, outcome_status,
+                SELECT student_id, graduation_term,
+                       first_name, last_name, full_name, email_address,
+                       primary_major, secondary_major, tertiary_major,
+                       data_source,
+                       outcome_status, outcome_recorded_date,
                        employer_name, job_title, employment_modality,
                        employer_city, employer_state, employer_country,
                        continuing_education_institution, continuing_education_program,
-                       continuing_education_degree,
-                       business_name, business_description,
+                       continuing_education_degree, continuing_education_city,
+                       continuing_education_state, continuing_education_country,
+                       business_name, business_position_title, business_description,
+                       business_year_started,
+                       business_city, business_state, business_country,
                        volunteer_organization, volunteer_role,
+                       volunteer_city, volunteer_state, volunteer_country,
                        military_branch, military_rank,
                        linkedin_profile_url,
                        record_created_at, record_updated_at

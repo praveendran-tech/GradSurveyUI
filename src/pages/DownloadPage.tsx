@@ -31,16 +31,43 @@ import {
 interface MasterRecord {
   student_id: string;
   graduation_term: string;
+  first_name: string | null;
+  last_name: string | null;
   full_name: string | null;
   email_address: string | null;
   primary_major: string | null;
+  secondary_major: string | null;
+  tertiary_major: string | null;
   data_source: string | null;
   outcome_status: string | null;
+  outcome_recorded_date: string | null;
   employer_name: string | null;
   job_title: string | null;
+  employment_modality: string | null;
+  employer_city: string | null;
+  employer_state: string | null;
+  employer_country: string | null;
   continuing_education_institution: string | null;
+  continuing_education_program: string | null;
+  continuing_education_degree: string | null;
+  continuing_education_city: string | null;
+  continuing_education_state: string | null;
+  continuing_education_country: string | null;
+  business_name: string | null;
+  business_position_title: string | null;
+  business_description: string | null;
+  business_year_started: string | null;
+  business_city: string | null;
+  business_state: string | null;
+  business_country: string | null;
+  volunteer_organization: string | null;
+  volunteer_role: string | null;
+  volunteer_city: string | null;
+  volunteer_state: string | null;
+  volunteer_country: string | null;
   military_branch: string | null;
   military_rank: string | null;
+  linkedin_profile_url: string | null;
   record_created_at: string | null;
   record_updated_at: string | null;
 }
@@ -80,23 +107,64 @@ export const DownloadPage: React.FC = () => {
     records.filter((r) => {
       const matchesMajor = selectedMajor === 'all' || r.primary_major === selectedMajor;
       const matchesTerm = selectedTerm === 'all' || r.graduation_term === selectedTerm;
-      return matchesMajor && matchesTerm;
+      const matchesSchool = selectedSchool === 'all' || (() => {
+        const entry = MAJORS.find((m) => m.code === r.primary_major);
+        return entry?.schoolCode === selectedSchool;
+      })();
+      return matchesMajor && matchesTerm && matchesSchool;
     });
 
   const handleDownload = () => {
     const filtered = getFilteredRecords();
     const csvData = filtered.map((r) => ({
-      Name: r.full_name ?? '',
-      UID: r.student_id,
-      Major: r.primary_major ?? '',
-      Term: r.graduation_term ?? '',
+      'UID': r.student_id,
+      'Full Name': r.full_name ?? '',
+      'First Name': r.first_name ?? '',
+      'Last Name': r.last_name ?? '',
+      'Email': r.email_address ?? '',
+      'Primary Major': r.primary_major ?? '',
+      'Secondary Major': r.secondary_major ?? '',
+      'Tertiary Major': r.tertiary_major ?? '',
+      'Graduation Term': r.graduation_term ?? '',
       'Data Source': r.data_source ?? '',
       'Outcome Status': r.outcome_status ?? '',
+      'Outcome Recorded Date': r.outcome_recorded_date ?? '',
+      // Employment
       'Employer Name': r.employer_name ?? '',
       'Job Title': r.job_title ?? '',
-      'Continuing Education Institution': r.continuing_education_institution ?? '',
+      'Employment Modality': r.employment_modality ?? '',
+      'Employer City': r.employer_city ?? '',
+      'Employer State': r.employer_state ?? '',
+      'Employer Country': r.employer_country ?? '',
+      // Continuing Education
+      'CE Institution': r.continuing_education_institution ?? '',
+      'CE Program': r.continuing_education_program ?? '',
+      'CE Degree': r.continuing_education_degree ?? '',
+      'CE City': r.continuing_education_city ?? '',
+      'CE State': r.continuing_education_state ?? '',
+      'CE Country': r.continuing_education_country ?? '',
+      // Business / Entrepreneur
+      'Business Name': r.business_name ?? '',
+      'Business Position Title': r.business_position_title ?? '',
+      'Business Description': r.business_description ?? '',
+      'Business Year Started': r.business_year_started ?? '',
+      'Business City': r.business_city ?? '',
+      'Business State': r.business_state ?? '',
+      'Business Country': r.business_country ?? '',
+      // Volunteer
+      'Volunteer Organization': r.volunteer_organization ?? '',
+      'Volunteer Role': r.volunteer_role ?? '',
+      'Volunteer City': r.volunteer_city ?? '',
+      'Volunteer State': r.volunteer_state ?? '',
+      'Volunteer Country': r.volunteer_country ?? '',
+      // Military
       'Military Branch': r.military_branch ?? '',
       'Military Rank': r.military_rank ?? '',
+      // Other
+      'LinkedIn Profile URL': r.linkedin_profile_url ?? '',
+      'Record Created': r.record_created_at
+        ? new Date(r.record_created_at).toLocaleString()
+        : '',
       'Last Updated': r.record_updated_at
         ? new Date(r.record_updated_at).toLocaleString()
         : '',
@@ -320,8 +388,9 @@ export const DownloadPage: React.FC = () => {
                     />
                   </Box>
                   <Typography variant="body2" sx={{ opacity: 0.95, lineHeight: 1.6 }}>
-                    <strong>CSV will include:</strong> Name, UID, Major, School, Term, Selected
-                    Source, Employment Info, Enrollment Info, and Last Updated timestamp
+                    <strong>CSV will include:</strong> UID, Name, Email, Major (primary/secondary/tertiary),
+                    Term, Data Source, Outcome Status, Employment, Continuing Education,
+                    Business/Entrepreneur, Volunteer, Military, LinkedIn URL, and timestamps.
                   </Typography>
                 </CardContent>
               </Card>

@@ -91,8 +91,12 @@ export const api = {
     });
 
     if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      throw new Error((detail as Record<string, string>).detail || `Failed to save master data: ${response.statusText}`);
+      const body = await response.json().catch(() => ({}));
+      const raw = (body as Record<string, unknown>).detail;
+      const msg = Array.isArray(raw)
+        ? (raw as Array<{ msg?: string }>).map((e) => e.msg ?? JSON.stringify(e)).join('; ')
+        : typeof raw === 'string' ? raw : `Failed to save master data: ${response.statusText}`;
+      throw new Error(msg);
     }
 
     return response.json();
@@ -107,8 +111,12 @@ export const api = {
       { method: 'DELETE' }
     );
     if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      throw new Error((detail as Record<string, string>).detail || `Failed to delete master record: ${response.statusText}`);
+      const body = await response.json().catch(() => ({}));
+      const raw = (body as Record<string, unknown>).detail;
+      const msg = Array.isArray(raw)
+        ? (raw as Array<{ msg?: string }>).map((e) => e.msg ?? JSON.stringify(e)).join('; ')
+        : typeof raw === 'string' ? raw : `Failed to delete master record: ${response.statusText}`;
+      throw new Error(msg);
     }
   },
 
