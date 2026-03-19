@@ -14,7 +14,6 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import type { MasterData } from '../types';
 
 // Maps frontend activity codes → canonical DB outcome_status values
 const ACTIVITY_TO_OUTCOME: Record<string, string> = {

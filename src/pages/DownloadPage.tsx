@@ -88,7 +88,7 @@ export const DownloadPage: React.FC = () => {
           api.getExportRecords(),
           api.getTerms(),
         ]);
-        setRecords(exportData.records as MasterRecord[]);
+        setRecords(exportData.records as unknown as MasterRecord[]);
         setTerms(termList);
       } catch (err) {
         console.error('Error fetching export data:', err);

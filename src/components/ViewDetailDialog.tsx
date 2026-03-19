@@ -13,7 +13,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import PollIcon from '@mui/icons-material/Poll';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import SchoolIcon from '@mui/icons-material/School';
-import WorkIcon from '@mui/icons-material/Work';
 import type {
   QualtricsResponse,
   LinkedInPosition,
@@ -35,60 +34,68 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
 }) => {
   if (!data) return null;
 
+  const renderSourceFileField = (sourceFile: string) => (
+    <Box
+      sx={{
+        mb: 3,
+        p: 2,
+        background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.05) 0%, rgba(255, 210, 0, 0.05) 100%)',
+        borderRadius: 2,
+        border: '1px solid rgba(226, 24, 51, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        flexWrap: 'wrap',
+      }}
+    >
+      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+        Source File:
+      </Typography>
+      <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ wordBreak: 'break-all' }}>
+        {sourceFile || 'N/A'}
+      </Typography>
+    </Box>
+  );
+
   const renderQualtricsData = (qualtricsData: QualtricsResponse) => {
-    // Fields to ignore in Qualtrics data
-    const ignoredFields = [
-      'Duration (in seconds)',
-      'Q_DataPolicyViolations',
-      'ExternalReference',
-      'LocationLongitude',
-      'LocationLatitude',
-      'ResponseId',
-      'IPAddress',
-      'ContactID',
-      'DistributionChannel'
+    // Only show these specific fields from the AWS headers reference
+    const allowedFields = [
+      'ExternalDataReference',
+      'EndDate',
+      'STATUS',
+      'STBUS_ORG',
+      'STBUS_CONTACT',
+      'STBUS_PURPOSE',
+      'STBUS_YRSTARTED',
+      'VOL_ORG',
+      'VOL_COUNTRY',
+      'MIL_BRANCH',
+      'MIL_RANK',
+      'CONTEDU_INST',
+      'CONTEDU_PROGRAM',
+      'CONTEDU_DEGREE',
+      'EMP_JobSite',
+      'EMP_ORG',
+      'EMP_CITY',
+      'EMP_STATE',
+      'EMP_COUNTRY',
+      'EMP_TITLE',
+      'LinkedIn Profile',
     ];
 
-    // Filter out null, undefined, empty values, booleans, and ignored fields from payload
-    const filteredEntries = Object.entries(qualtricsData.payload).filter(([key, value]) => {
-      if (value === null || value === undefined || value === '') return false;
-      if (typeof value === 'string' && value.trim() === '') return false;
-      if (typeof value === 'boolean') return false;
-      // Filter out string representations of booleans (case variations)
-      const stringValue = String(value);
-      if (stringValue === 'true' || stringValue === 'false' ||
-          stringValue === 'True' || stringValue === 'False' ||
-          stringValue === 'TRUE' || stringValue === 'FALSE') return false;
-      if (ignoredFields.includes(key)) return false;
-      // Filter out status fields with IP addresses
-      if (key.toLowerCase() === 'status' && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(stringValue)) return false;
-      return true;
-    });
+    // Show only allowed fields with non-null values
+    const filteredEntries = allowedFields
+      .map(key => [key, qualtricsData.payload[key]] as [string, unknown])
+      .filter(([, value]) => {
+        if (value === null || value === undefined || value === '') return false;
+        if (typeof value === 'string' && value.trim() === '') return false;
+        if (String(value).toUpperCase() === 'NULL') return false;
+        return true;
+      });
 
     return (
       <Box>
-        <Box
-          sx={{
-            mb: 4,
-            p: 2,
-            background: 'linear-gradient(135deg, rgba(226, 24, 51, 0.05) 0%, rgba(255, 210, 0, 0.05) 100%)',
-            borderRadius: 2,
-            border: '1px solid rgba(226, 24, 51, 0.1)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 1,
-          }}
-        >
-          <Typography variant="body2" color="text.secondary" fontWeight={500}>
-            Survey ID:
-          </Typography>
-          <Typography variant="body2" fontWeight={700} color="primary.main">
-            {qualtricsData.survey_id || 'N/A'}
-          </Typography>
-        </Box>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 3, color: '#1a1a1a' }}>
-          Survey Responses
-        </Typography>
+        {renderSourceFileField(qualtricsData.source_file)}
         <Box sx={{ display: 'grid', gap: 2.5 }}>
           {filteredEntries.map(([key, value]) => (
             <Box
@@ -146,44 +153,53 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
   };
 
   const renderLinkedInData = (linkedInData: LinkedInPosition) => {
-    // Filter out null, undefined, empty values, and booleans from payload
-    const filteredEntries = Object.entries(linkedInData.payload).filter(([_, value]) => {
-      if (value === null || value === undefined || value === '') return false;
-      if (typeof value === 'string' && value.trim() === '') return false;
-      if (typeof value === 'boolean') return false;
-      return true;
-    });
+    // Label → actual payload key mapping
+    const fieldMap: [string, string][] = [
+      ['U_Id', 'u_id'],
+      ['Date', 'date_doubleclick'],
+      ['Status', 'status'],
+      ['Data Source', 'data_source'],
+      ['Name of Started Business', 'name_of_started_business'],
+      ['Started Business Position Title', 'started_business_position_title'],
+      ['Started Business Country', 'started_business_country'],
+      ['Started Business City', 'started_business_city'],
+      ['Started Business State', 'started_business_state'],
+      ['Started Business Description', 'started_business_description'],
+      ['Volunteer Organization', 'volunteer_organization'],
+      ['Volunteer Organization Country', 'volunteer_organization_country'],
+      ['Volunteer City', 'volunteer_city'],
+      ['Volunteer State', 'volunteer_state'],
+      ['Volunteer Role', 'volunteer_role'],
+      ['Joined Military Branch', 'joined_military_branch'],
+      ['Military Rank', 'military_rank'],
+      ['Continuing Education Institution', 'continuing_education_institution'],
+      ['Continuing Education Country', 'continuing_education_country'],
+      ['Continuing Education City', 'continuing_education_city'],
+      ['Continuing Education State', 'continuing_education_state'],
+      ['Continuing Education Program', 'continuing_education_program'],
+      ['Continuing Education Degree', 'continuing_education_degree'],
+      ['Modality (Hybrid etc.if known)', 'modality_(hybrid_etc.if_known)'],
+      ['Name of Employer', 'name_of_employer'],
+      ['Employer City', 'employer_city'],
+      ['Employer State', 'employer_state'],
+      ['Employer Country', 'employer_country'],
+      ['Job Title', 'job_title'],
+      ['LinkedIn URL', 'linkedin_url'],
+    ];
+
+    // Show only fields with non-null values
+    const filteredEntries = fieldMap
+      .map(([label, key]) => [label, linkedInData.payload[key]] as [string, unknown])
+      .filter(([, value]) => {
+        if (value === null || value === undefined || value === '') return false;
+        if (typeof value === 'string' && value.trim() === '') return false;
+        if (String(value).toUpperCase() === 'NULL') return false;
+        return true;
+      });
 
     return (
       <Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            mb: 3,
-            pb: 2,
-            borderBottom: '2px solid #f0f0f0',
-          }}
-        >
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #E21833 0%, #C41230 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(226, 24, 51, 0.2)',
-            }}
-          >
-            <WorkIcon sx={{ color: 'white', fontSize: 22 }} />
-          </Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: '#1a1a1a' }}>
-            LinkedIn Profile Data
-          </Typography>
-        </Box>
+        {renderSourceFileField(linkedInData.source_file)}
         <Box sx={{ display: 'grid', gap: 2.5 }}>
           {filteredEntries.map(([key, value]) => (
             <Box
@@ -241,44 +257,29 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
   };
 
   const renderClearingHouseData = (clearingHouseData: ClearingHouseRecord) => {
-    // Filter out null, undefined, empty values, and booleans from payload
-    const filteredEntries = Object.entries(clearingHouseData.payload).filter(([_, value]) => {
-      if (value === null || value === undefined || value === '') return false;
-      if (typeof value === 'string' && value.trim() === '') return false;
-      if (typeof value === 'boolean') return false;
-      return true;
-    });
+    // Only show these specific fields from the AWS headers reference
+    const allowedFields = [
+      'Requester Return Field',
+      'College Name',
+      'College State',
+      'Enrollment Major 1',
+      'Class Level',
+      'Degree Title',
+    ];
+
+    // Show only allowed fields with non-null values
+    const filteredEntries = allowedFields
+      .map(key => [key, clearingHouseData.payload[key]] as [string, unknown])
+      .filter(([, value]) => {
+        if (value === null || value === undefined || value === '') return false;
+        if (typeof value === 'string' && value.trim() === '') return false;
+        if (String(value).toUpperCase() === 'NULL') return false;
+        return true;
+      });
 
     return (
       <Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            mb: 3,
-            pb: 2,
-            borderBottom: '2px solid #f0f0f0',
-          }}
-        >
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #E21833 0%, #C41230 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(226, 24, 51, 0.2)',
-            }}
-          >
-            <SchoolIcon sx={{ color: 'white', fontSize: 22 }} />
-          </Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: '#1a1a1a' }}>
-            ClearingHouse Enrollment Data
-          </Typography>
-        </Box>
+        {renderSourceFileField(clearingHouseData.source_file)}
         <Box sx={{ display: 'grid', gap: 2.5 }}>
           {filteredEntries.map(([key, value]) => (
             <Box

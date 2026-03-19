@@ -5,7 +5,6 @@ import {
   Container,
   Typography,
   Button,
-  Paper,
   Card,
   CardContent,
   keyframes,
@@ -52,15 +51,6 @@ const scaleIn = keyframes`
   to {
     opacity: 1;
     transform: scale(1);
-  }
-`;
-
-const shimmer = keyframes`
-  0% {
-    background-position: -200% center;
-  }
-  100% {
-    background-position: 200% center;
   }
 `;
 

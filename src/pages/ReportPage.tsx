@@ -38,8 +38,6 @@ import {
   SCHOOLS,
   MAJORS,
   SCHOOL_CODE_TO_NAME,
-  MAJOR_COMPOUND_TO_NAME,
-  MAJOR_CODE_TO_NAME,
 } from '../majorData';
 
 // ── types ─────────────────────────────────────────────────────────────────────

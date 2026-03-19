@@ -15,7 +15,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import type { Student, MasterData } from '../types';
+import type { Student } from '../types';
 import { MAJOR_COMPOUND_TO_NAME, MAJOR_CODE_TO_NAME, SCHOOL_CODE_TO_NAME } from '../majorData';
 import { DataSourceCard } from './DataSourceCard';
 import { AddManuallyDialog } from './AddManuallyDialog';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
-import type { Student, MasterData } from '../types';
+import type { Student } from '../types';
 import { StudentCard } from './StudentCard';
 
 interface StudentListProps {
