@@ -34,14 +34,24 @@ def _build_demo_where(name_filter, major_filter, school_filter, term_filter,
         clauses.append("LOWER(d.payload->>'name') LIKE LOWER(%s)")
         params.append(f"%{name_filter}%")
     if major_filter:
-        clauses.append("LOWER(d.payload->>'major1_major') LIKE LOWER(%s)")
-        params.append(f"%{major_filter}%")
+        if isinstance(major_filter, list) and len(major_filter) > 0:
+            or_clauses = ["LOWER(d.payload->>'major1_major') LIKE LOWER(%s)" for _ in major_filter]
+            clauses.append(f"({' OR '.join(or_clauses)})")
+            params.extend([f"%{m}%" for m in major_filter])
+        elif isinstance(major_filter, str):
+            clauses.append("LOWER(d.payload->>'major1_major') LIKE LOWER(%s)")
+            params.append(f"%{major_filter}%")
     if school_filter:
         clauses.append("LOWER(d.payload->>'major1_coll') LIKE LOWER(%s)")
         params.append(f"%{school_filter}%")
     if term_filter:
-        clauses.append("d.term = %s")
-        params.append(term_filter)
+        if isinstance(term_filter, list) and len(term_filter) > 0:
+            placeholders = ','.join(['%s'] * len(term_filter))
+            clauses.append(f"d.term IN ({placeholders})")
+            params.extend(term_filter)
+        elif isinstance(term_filter, str):
+            clauses.append("d.term = %s")
+            params.append(term_filter)
     if uid_filter:
         clauses.append("d.uid::text LIKE %s")
         params.append(f"%{uid_filter}%")
@@ -815,11 +825,21 @@ def get_master_records(term_filter=None, major_filter=None, school_filter=None) 
     clauses = []
     params = []
     if term_filter:
-        clauses.append("graduation_term = %s")
-        params.append(term_filter)
+        if isinstance(term_filter, list) and len(term_filter) > 0:
+            placeholders = ','.join(['%s'] * len(term_filter))
+            clauses.append(f"graduation_term IN ({placeholders})")
+            params.extend(term_filter)
+        elif isinstance(term_filter, str):
+            clauses.append("graduation_term = %s")
+            params.append(term_filter)
     if major_filter:
-        clauses.append("LOWER(primary_major) LIKE LOWER(%s)")
-        params.append(f"%{major_filter}%")
+        if isinstance(major_filter, list) and len(major_filter) > 0:
+            or_clauses = ["LOWER(primary_major) LIKE LOWER(%s)" for _ in major_filter]
+            clauses.append(f"({' OR '.join(or_clauses)})")
+            params.extend([f"%{m}%" for m in major_filter])
+        elif isinstance(major_filter, str):
+            clauses.append("LOWER(primary_major) LIKE LOWER(%s)")
+            params.append(f"%{major_filter}%")
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     with get_db_connection() as conn:

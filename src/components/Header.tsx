@@ -69,7 +69,7 @@ export const Header: React.FC = () => {
                 },
               }}
             >
-              Dashboard
+              Student Data
             </Button>
             <Button
               onClick={() => navigate('/download')}
@@ -99,7 +99,7 @@ export const Header: React.FC = () => {
                 },
               }}
             >
-              Major Reports
+              Reports
             </Button>
           </Stack>
         </Toolbar>

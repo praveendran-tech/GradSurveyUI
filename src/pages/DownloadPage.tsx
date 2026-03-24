@@ -9,6 +9,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  OutlinedInput,
   Card,
   CardContent,
   Divider,
@@ -76,9 +77,9 @@ export const DownloadPage: React.FC = () => {
   const [records, setRecords] = useState<MasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [terms, setTerms] = useState<string[]>([]);
-  const [selectedMajor, setSelectedMajor] = useState<string>('all');
+  const [selectedMajors, setSelectedMajors] = useState<string[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
-  const [selectedTerm, setSelectedTerm] = useState<string>('all');
+  const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -99,14 +100,15 @@ export const DownloadPage: React.FC = () => {
     fetchData();
   }, []);
 
-  const availableMajors = selectedSchool === 'all'
+  const availableMajors = (selectedSchool === 'all'
     ? MAJORS
-    : MAJORS.filter((m) => m.schoolCode === selectedSchool);
+    : MAJORS.filter((m) => m.schoolCode === selectedSchool)
+  ).slice().sort((a, b) => a.name.localeCompare(b.name));
 
   const getFilteredRecords = () =>
     records.filter((r) => {
-      const matchesMajor = selectedMajor === 'all' || r.primary_major === selectedMajor;
-      const matchesTerm = selectedTerm === 'all' || r.graduation_term === selectedTerm;
+      const matchesMajor = selectedMajors.length === 0 || selectedMajors.includes(r.primary_major ?? '');
+      const matchesTerm = selectedTerms.length === 0 || selectedTerms.includes(r.graduation_term ?? '');
       const matchesSchool = selectedSchool === 'all' || (() => {
         const entry = MAJORS.find((m) => m.code === r.primary_major);
         return entry?.schoolCode === selectedSchool;
@@ -171,9 +173,9 @@ export const DownloadPage: React.FC = () => {
     }));
 
     const csv = unparse(csvData);
-    const majorPart = selectedMajor === 'all' ? 'AllMajors' : selectedMajor.replace(/\s+/g, '_');
+    const majorPart = selectedMajors.length ? selectedMajors.join('_').replace(/\s+/g, '_') : 'AllMajors';
     const schoolPart = selectedSchool === 'all' ? 'AllSchools' : selectedSchool.substring(0, 20).replace(/\s+/g, '_');
-    const termPart = selectedTerm === 'all' ? 'AllTerms' : selectedTerm.replace(/\s+/g, '_');
+    const termPart = selectedTerms.length ? selectedTerms.join('_').replace(/\s+/g, '_') : 'AllTerms';
     const datePart = new Date().toISOString().split('T')[0];
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -187,12 +189,12 @@ export const DownloadPage: React.FC = () => {
   };
 
   const resetFilters = () => {
-    setSelectedMajor('all');
+    setSelectedMajors([]);
     setSelectedSchool('all');
-    setSelectedTerm('all');
+    setSelectedTerms([]);
   };
 
-  const hasActiveFilters = selectedMajor !== 'all' || selectedSchool !== 'all' || selectedTerm !== 'all';
+  const hasActiveFilters = selectedMajors.length > 0 || selectedSchool !== 'all' || selectedTerms.length > 0;
   const filteredCount = getFilteredRecords().length;
 
   return (
@@ -276,9 +278,10 @@ export const DownloadPage: React.FC = () => {
                       onChange={(e) => {
                         const school = e.target.value;
                         setSelectedSchool(school);
-                        const majorStillValid = school === 'all' ||
-                          MAJORS.some((m) => m.schoolCode === school && m.code === selectedMajor);
-                        if (!majorStillValid) setSelectedMajor('all');
+                        if (school !== 'all') {
+                          const validCodes = new Set(MAJORS.filter((m) => m.schoolCode === school).map((m) => m.code));
+                          setSelectedMajors((prev) => prev.filter((c) => validCodes.has(c)));
+                        }
                       }}
                       renderValue={(val) => val === 'all' ? 'All Schools' : (SCHOOL_CODE_TO_NAME[val] ?? val)}
                     >
@@ -290,25 +293,27 @@ export const DownloadPage: React.FC = () => {
                   </FormControl>
 
                   <FormControl fullWidth>
-                    <InputLabel>Major</InputLabel>
-                    <Select
-                      value={selectedMajor}
-                      label="Major"
+                    <InputLabel id="dl-major-label">Major</InputLabel>
+                    <Select<string[]>
+                      labelId="dl-major-label"
+                      multiple
+                      value={selectedMajors}
+                      input={<OutlinedInput label="Major" />}
                       onChange={(e) => {
-                        const major = e.target.value;
-                        setSelectedMajor(major);
-                        if (major !== 'all') {
-                          const entry = MAJORS.find((m) => m.code === major);
-                          if (entry) setSelectedSchool(entry.schoolCode);
-                        }
+                        const val = e.target.value;
+                        setSelectedMajors(typeof val === 'string' ? val.split(',') : val);
                       }}
-                      renderValue={(val) => {
-                        if (val === 'all') return 'All Majors';
-                        const entry = MAJORS.find((m) => m.code === val);
-                        return entry ? entry.name : val;
-                      }}
+                      renderValue={(selected) => (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {selected.length === 0
+                            ? <em style={{ color: '#999' }}>All Majors</em>
+                            : selected.map((code) => {
+                                const entry = MAJORS.find((m) => m.code === code);
+                                return <Chip key={code} label={entry ? entry.name : code} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />;
+                              })}
+                        </Box>
+                      )}
                     >
-                      <MenuItem value="all"><em>All Majors</em></MenuItem>
                       {availableMajors.map((m) => (
                         <MenuItem key={`${m.schoolCode}-${m.code}`} value={m.code}>{m.name}</MenuItem>
                       ))}
@@ -316,13 +321,24 @@ export const DownloadPage: React.FC = () => {
                   </FormControl>
 
                   <FormControl fullWidth>
-                    <InputLabel>Term</InputLabel>
-                    <Select
-                      value={selectedTerm}
-                      label="Term"
-                      onChange={(e) => setSelectedTerm(e.target.value)}
+                    <InputLabel id="dl-term-label">Term</InputLabel>
+                    <Select<string[]>
+                      labelId="dl-term-label"
+                      multiple
+                      value={selectedTerms}
+                      input={<OutlinedInput label="Term" />}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedTerms(typeof val === 'string' ? val.split(',') : val);
+                      }}
+                      renderValue={(selected) => (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {selected.length === 0
+                            ? <em style={{ color: '#999' }}>All Terms</em>
+                            : selected.map((t) => <Chip key={t} label={t} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />)}
+                        </Box>
+                      )}
                     >
-                      <MenuItem value="all"><em>All Terms</em></MenuItem>
                       {terms.map((term) => (
                         <MenuItem key={term} value={term}>{term}</MenuItem>
                       ))}
@@ -341,24 +357,26 @@ export const DownloadPage: React.FC = () => {
                     {selectedSchool !== 'all' && (
                       <Chip
                         label={`School: ${SCHOOL_CODE_TO_NAME[selectedSchool] ?? selectedSchool}`}
-                        onDelete={() => { setSelectedSchool('all'); setSelectedMajor('all'); }}
+                        onDelete={() => { setSelectedSchool('all'); setSelectedMajors([]); }}
                         color="primary" variant="outlined"
                       />
                     )}
-                    {selectedMajor !== 'all' && (
+                    {selectedMajors.map((code) => (
                       <Chip
-                        label={`Major: ${MAJORS.find((m) => m.code === selectedMajor)?.name ?? selectedMajor}`}
-                        onDelete={() => setSelectedMajor('all')}
+                        key={code}
+                        label={`Major: ${MAJORS.find((m) => m.code === code)?.name ?? code}`}
+                        onDelete={() => setSelectedMajors((prev) => prev.filter((c) => c !== code))}
                         color="primary" variant="outlined"
                       />
-                    )}
-                    {selectedTerm !== 'all' && (
+                    ))}
+                    {selectedTerms.map((t) => (
                       <Chip
-                        label={`Term: ${selectedTerm}`}
-                        onDelete={() => setSelectedTerm('all')}
+                        key={t}
+                        label={`Term: ${t}`}
+                        onDelete={() => setSelectedTerms((prev) => prev.filter((x) => x !== t))}
                         color="primary" variant="outlined"
                       />
-                    )}
+                    ))}
                   </Box>
                 </Box>
               )}

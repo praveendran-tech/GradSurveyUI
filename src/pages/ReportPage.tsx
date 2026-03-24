@@ -9,6 +9,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  OutlinedInput,
   Card,
   CardContent,
   Divider,
@@ -47,13 +48,13 @@ interface TableEntry { label?: string; n?: number; employer?: string; title?: st
 interface ReportData {
   meta: { major: string; school: string; term: string; generated_at: string };
   totals: { total_graduates: number; survey_count: number; linkedin_count: number; clearinghouse_count: number; known_count: number; survey_response_rate: number; knowledge_rate: number };
-  outcomes: { table: OutcomeRow[]; grand_total: number; placement_rate: number; employed_count: number; employed_pct: number };
+  outcomes: { table: OutcomeRow[]; grand_total: number; placement_rate: number; employed_count: number; employed_pct: number; in_workforce_count: number; in_workforce_pct: number };
   nature: { respondents: number; nature_counts: Record<string, number>; field_counts: Record<string, number>; modality_counts: Record<string, number> };
-  salary: { n_reported: number; n_full_time: number; bonus_count: number; p25: number; p50: number; p75: number } | null;
+  salary: { n_reported: number; n_full_time: number; bonus_count: number; bonus_median: number | null; bonus_list: string[]; p25: number; p50: number; p75: number } | null;
   emp_search: { respondents: number; table: [string, number][] };
   geography: { respondents: number; table: [string, number][] };
-  business: { count: number };
-  volunteer: { count: number };
+  business: { count: number; details: { org: string; purpose: string }[] };
+  volunteer: { count: number; details: { org: string; role: string }[] };
   military: { count: number };
   continuing_education: { count: number; umd_count: number; degree_table: [string, number][]; programs: TableEntry[] };
   otherexp: { respondents: number; table: [string, number][] };
@@ -89,35 +90,34 @@ const DataRow: React.FC<{ cells: (string | number)[]; bold?: boolean; idx?: numb
 // ── component ─────────────────────────────────────────────────────────────────
 
 export const ReportPage: React.FC = () => {
-  const [selectedMajor, setSelectedMajor] = useState<string>('all');
+  const [selectedMajors, setSelectedMajors] = useState<string[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
-  const [selectedTerm, setSelectedTerm] = useState<string>('all');
+  const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
   const [terms, setTerms] = useState<string[]>([]);
+  const [termsLoading, setTermsLoading] = useState(true);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getTerms().then(setTerms).catch(() => {});
+    api.getTerms()
+      .then(setTerms)
+      .catch((e) => console.error('Failed to load terms:', e))
+      .finally(() => setTermsLoading(false));
   }, []);
 
-  const availableMajors = selectedSchool === 'all'
+  const availableMajors = (selectedSchool === 'all'
     ? MAJORS
-    : MAJORS.filter((m) => m.schoolCode === selectedSchool);
-
-  const majorLabel = (() => {
-    if (selectedMajor === 'all') return 'All Majors';
-    const entry = MAJORS.find((m) => m.code === selectedMajor);
-    return entry ? entry.name : selectedMajor;
-  })();
+    : MAJORS.filter((m) => m.schoolCode === selectedSchool)
+  ).slice().sort((a, b) => a.name.localeCompare(b.name));
 
   const schoolLabel = selectedSchool === 'all' ? 'All Schools' : (SCHOOL_CODE_TO_NAME[selectedSchool] ?? selectedSchool);
 
   const buildParams = () => ({
-    major: selectedMajor === 'all' ? undefined : selectedMajor,
+    major: selectedMajors.length ? selectedMajors : undefined,
     school: selectedSchool === 'all' ? undefined : selectedSchool,
-    term: selectedTerm === 'all' ? undefined : selectedTerm,
+    term: selectedTerms.length ? selectedTerms : undefined,
   });
 
   const handlePreview = async () => {
@@ -141,8 +141,8 @@ export const ReportPage: React.FC = () => {
       const response = await fetch(url);
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
-      const major_part = selectedMajor === 'all' ? 'AllMajors' : selectedMajor.replace(/\s+/g, '_');
-      const term_part = selectedTerm === 'all' ? 'AllTerms' : selectedTerm;
+      const major_part = selectedMajors.length ? selectedMajors.join('_').replace(/\s+/g, '_') : 'AllMajors';
+      const term_part = selectedTerms.length ? selectedTerms.join('_') : 'AllTerms';
       const date_part = new Date().toISOString().split('T')[0];
       const filename = `GradOutcomesReport_${major_part}_${term_part}_${date_part}.docx`;
       const link = document.createElement('a');
@@ -156,7 +156,7 @@ export const ReportPage: React.FC = () => {
     }
   };
 
-  const hasFilters = selectedMajor !== 'all' || selectedSchool !== 'all' || selectedTerm !== 'all';
+  const hasFilters = selectedMajors.length > 0 || selectedSchool !== 'all' || selectedTerms.length > 0;
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -197,7 +197,7 @@ export const ReportPage: React.FC = () => {
               {hasFilters && (
                 <Button
                   size="small"
-                  onClick={() => { setSelectedMajor('all'); setSelectedSchool('all'); setSelectedTerm('all'); setReportData(null); }}
+                  onClick={() => { setSelectedMajors([]); setSelectedSchool('all'); setSelectedTerms([]); setReportData(null); }}
                   sx={{ ml: 'auto', textTransform: 'none', color: 'text.secondary' }}
                 >
                   Clear
@@ -214,8 +214,11 @@ export const ReportPage: React.FC = () => {
                   onChange={(e) => {
                     const s = e.target.value;
                     setSelectedSchool(s);
-                    const stillValid = s === 'all' || MAJORS.some((m) => m.schoolCode === s && m.code === selectedMajor);
-                    if (!stillValid) setSelectedMajor('all');
+                    // Remove majors that don't belong to the new school
+                    if (s !== 'all') {
+                      const validCodes = new Set(MAJORS.filter((m) => m.schoolCode === s).map((m) => m.code));
+                      setSelectedMajors((prev) => prev.filter((c) => validCodes.has(c)));
+                    }
                     setReportData(null);
                   }}
                 >
@@ -225,26 +228,28 @@ export const ReportPage: React.FC = () => {
               </FormControl>
 
               <FormControl fullWidth size="small">
-                <InputLabel>Major</InputLabel>
-                <Select
-                  value={selectedMajor}
-                  label="Major"
+                <InputLabel id="report-major-label">Major</InputLabel>
+                <Select<string[]>
+                  labelId="report-major-label"
+                  multiple
+                  value={selectedMajors}
+                  input={<OutlinedInput label="Major" />}
                   onChange={(e) => {
-                    const m = e.target.value;
-                    setSelectedMajor(m);
-                    if (m !== 'all') {
-                      const entry = MAJORS.find((x) => x.code === m);
-                      if (entry) setSelectedSchool(entry.schoolCode);
-                    }
+                    const val = e.target.value;
+                    setSelectedMajors(typeof val === 'string' ? val.split(',') : val);
                     setReportData(null);
                   }}
-                  renderValue={(val) => {
-                    if (val === 'all') return 'All Majors';
-                    const entry = MAJORS.find((m) => m.code === val);
-                    return entry ? entry.name : val;
-                  }}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.length === 0
+                        ? <em style={{ color: '#999' }}>All Majors</em>
+                        : selected.map((code) => {
+                            const entry = MAJORS.find((m) => m.code === code);
+                            return <Chip key={code} label={entry ? entry.name : code} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />;
+                          })}
+                    </Box>
+                  )}
                 >
-                  <MenuItem value="all"><em>All Majors</em></MenuItem>
                   {availableMajors.map((m) => (
                     <MenuItem key={`${m.schoolCode}-${m.code}`} value={m.code}>{m.name}</MenuItem>
                   ))}
@@ -252,13 +257,26 @@ export const ReportPage: React.FC = () => {
               </FormControl>
 
               <FormControl fullWidth size="small">
-                <InputLabel>Term</InputLabel>
-                <Select
-                  value={selectedTerm}
-                  label="Term"
-                  onChange={(e) => { setSelectedTerm(e.target.value); setReportData(null); }}
+                <InputLabel id="report-term-label">Term</InputLabel>
+                <Select<string[]>
+                  labelId="report-term-label"
+                  multiple
+                  value={selectedTerms}
+                  input={<OutlinedInput label="Term" />}
+                  disabled={termsLoading}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedTerms(typeof val === 'string' ? val.split(',') : val);
+                    setReportData(null);
+                  }}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.length === 0
+                        ? <em style={{ color: '#999' }}>{termsLoading ? 'Loading…' : 'All Terms'}</em>
+                        : selected.map((t) => <Chip key={t} label={t} size="small" sx={{ height: 20, fontSize: '0.7rem' }} />)}
+                    </Box>
+                  )}
                 >
-                  <MenuItem value="all"><em>All Terms</em></MenuItem>
                   {terms.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
                 </Select>
               </FormControl>
@@ -268,16 +286,19 @@ export const ReportPage: React.FC = () => {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
                   {selectedSchool !== 'all' && (
                     <Chip size="small" label={`School: ${schoolLabel}`} color="primary" variant="outlined"
-                      onDelete={() => { setSelectedSchool('all'); setSelectedMajor('all'); setReportData(null); }} />
+                      onDelete={() => { setSelectedSchool('all'); setSelectedMajors([]); setReportData(null); }} />
                   )}
-                  {selectedMajor !== 'all' && (
-                    <Chip size="small" label={`Major: ${majorLabel}`} color="primary" variant="outlined"
-                      onDelete={() => { setSelectedMajor('all'); setReportData(null); }} />
-                  )}
-                  {selectedTerm !== 'all' && (
-                    <Chip size="small" label={`Term: ${selectedTerm}`} color="primary" variant="outlined"
-                      onDelete={() => { setSelectedTerm('all'); setReportData(null); }} />
-                  )}
+                  {selectedMajors.map((code) => {
+                    const entry = MAJORS.find((m) => m.code === code);
+                    return (
+                      <Chip key={code} size="small" label={`Major: ${entry ? entry.name : code}`} color="primary" variant="outlined"
+                        onDelete={() => { setSelectedMajors((prev) => prev.filter((c) => c !== code)); setReportData(null); }} />
+                    );
+                  })}
+                  {selectedTerms.map((t) => (
+                    <Chip key={t} size="small" label={`Term: ${t}`} color="primary" variant="outlined"
+                      onDelete={() => { setSelectedTerms((prev) => prev.filter((x) => x !== t)); setReportData(null); }} />
+                  ))}
                 </Box>
               )}
 
@@ -384,6 +405,11 @@ export const ReportPage: React.FC = () => {
                       label={`${reportData.outcomes.placement_rate}% Placement Rate`}
                       sx={{ fontWeight: 700, bgcolor: '#FFD200', color: '#000' }}
                     />
+                    <Chip
+                      label={`${reportData.outcomes.in_workforce_pct}% In Workforce`}
+                      variant="outlined"
+                      color="primary"
+                    />
                   </Box>
                 </Paper>
 
@@ -475,6 +501,22 @@ export const ReportPage: React.FC = () => {
                           </TableBody>
                         </Table>
                       </TableContainer>
+                      {/* Bonus section */}
+                      {reportData.salary.bonus_count > 0 && (
+                        <Box sx={{ p: 2, borderTop: '1px solid #eee' }}>
+                          <Typography variant="subtitle2" fontWeight={700} gutterBottom>Bonus</Typography>
+                          {reportData.salary.bonus_median != null ? (
+                            <Typography variant="body2">
+                              Median bonus: <strong>${reportData.salary.bonus_median.toLocaleString()}</strong>
+                              {' '}({reportData.salary.bonus_count} {reportData.salary.bonus_count === 1 ? 'respondent' : 'respondents'})
+                            </Typography>
+                          ) : reportData.salary.bonus_list && reportData.salary.bonus_list.length > 0 ? (
+                            <Typography variant="body2">
+                              Reported bonus values: {reportData.salary.bonus_list.join(', ')}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      )}
                     </AccordionDetails>
                   </Accordion>
                 )}
@@ -538,6 +580,72 @@ export const ReportPage: React.FC = () => {
                   </Accordion>
                 )}
 
+                {/* Starting a Business */}
+                {reportData.business.count > 0 && (
+                  <Accordion elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
+                      <Typography fontWeight={700}>Starting a Business</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 0 }}>
+                      <Box sx={{ p: 2, bgcolor: '#fffbf0', borderBottom: '1px solid #eee' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {reportData.business.count} graduate{reportData.business.count !== 1 ? 's' : ''} reported starting a business.
+                        </Typography>
+                      </Box>
+                      {reportData.business.details.length > 0 && (
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <HeaderCell>Organization</HeaderCell>
+                                <HeaderCell>Purpose / Description</HeaderCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {reportData.business.details.map((row, i) => (
+                                <DataRow key={i} idx={i} cells={[row.org, row.purpose]} />
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
+                {/* Volunteering / Service */}
+                {reportData.volunteer.count > 0 && (
+                  <Accordion elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
+                      <Typography fontWeight={700}>Volunteering / Service Program</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 0 }}>
+                      <Box sx={{ p: 2, bgcolor: '#fffbf0', borderBottom: '1px solid #eee' }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {reportData.volunteer.count} graduate{reportData.volunteer.count !== 1 ? 's' : ''} reported volunteering or participating in a service program.
+                        </Typography>
+                      </Box>
+                      {reportData.volunteer.details.length > 0 && (
+                        <TableContainer>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <HeaderCell>Organization</HeaderCell>
+                                <HeaderCell>Role</HeaderCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {reportData.volunteer.details.map((row, i) => (
+                                <DataRow key={i} idx={i} cells={[row.org, row.role]} />
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
                 {/* Continuing Education */}
                 <Accordion elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
@@ -568,6 +676,24 @@ export const ReportPage: React.FC = () => {
                                   const total = reportData.continuing_education.degree_table.reduce((a, [, v]) => a + v, 0);
                                   return <DataRow key={deg} idx={i} cells={[deg, n, pct(n, total)]} />;
                                 })}
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        )}
+                        {reportData.continuing_education.programs.length > 0 && (
+                          <TableContainer sx={{ mt: 2 }}>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <HeaderCell>Institution</HeaderCell>
+                                  <HeaderCell>Program</HeaderCell>
+                                  <HeaderCell>Degree</HeaderCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {reportData.continuing_education.programs.map((row, i) => (
+                                  <DataRow key={i} idx={i} cells={[row.institution ?? '', row.program ?? '', row.degree ?? '']} />
+                                ))}
                               </TableBody>
                             </Table>
                           </TableContainer>

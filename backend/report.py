@@ -34,15 +34,16 @@ import database
 # ── Lookup tables ──────────────────────────────────────────────────────────────
 
 STATUS_TO_OUTCOME = {
-    "employed full-time":                             "Employed full-time",
-    "employed part-time":                             "Employed part-time",
+    "employed full-time":                              "Employed full-time",
+    "employed part-time":                              "Employed part-time",
     "accepted into a program of continuing education": "Continuing education",
-    "applied to graduate school":                     "Continuing education",
-    "starting my own business":                       "Starting a business",
-    "serving in the u.s. armed forces":               "Serving in the U.S. Armed Forces",
-    "participating in a service":                     "Volunteering or service program",
-    "not seeking":                                    "NOT seeking",
-    "actively seeking":                               "Unplaced",
+    # "applied to graduate school" = intent without acceptance → Unplaced per spec
+    "applied to graduate school":                      "Unplaced",
+    "starting my own business":                        "Starting a business",
+    "serving in the u.s. armed forces":                "Serving in the U.S. Armed Forces",
+    "participating in a service":                      "Volunteering or service program",
+    "not seeking":                                     "NOT seeking",
+    "actively seeking":                                "Unplaced",
 }
 
 EMP_HOW_LABEL = {
@@ -153,20 +154,49 @@ def _percentile(sorted_vals, p):
     return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (idx - lo)
 
 
+def _get_term_cutoff(term: str):
+    """
+    Return the Phase 1 cutoff date for a graduation term.
+    Summer  (Aug grads)  → December 1 same year
+    Fall    (Dec grads)  → April 1 next year
+    Spring  (May grads)  → September 1 same year
+    """
+    m = re.search(r'(spring|summer|fall|winter)\s+(\d{4})', term.lower())
+    if not m:
+        return None
+    season, year = m.group(1), int(m.group(2))
+    if season == "summer":  return datetime(year, 12, 1)
+    if season == "fall":    return datetime(year + 1, 4, 1)
+    if season == "spring":  return datetime(year, 9, 1)
+    if season == "winter":  return datetime(year, 4, 1)
+    return None
+
+
 # ── Per-student multi-source helpers ─────────────────────────────────────────
 
 def _student_outcome(student: dict) -> str:
     """
     Derive the best available outcome for a student, checking all sources in order:
     Qualtrics STATUS → LinkedIn status/employment → Clearinghouse (always CE)
-    → master DB outcome_status → Unresolved
+    → master DB outcome_status → date-based Unresolved/Unplaced → Unresolved
+
+    Unresolved vs Unplaced (per spec):
+      Unresolved  = responded to survey BEFORE the Phase 1 cutoff date AND no other info
+      Unplaced    = responded on/after cutoff AND no outcome, OR reported actively seeking
+                    OR reported "applied to graduate school" (intent without acceptance)
     """
+    has_survey_response = bool(student.get("qualtrics_data"))
+
     # 1. Qualtrics — highest fidelity
-    if student.get("qualtrics_data"):
+    if has_survey_response:
         p = student["qualtrics_data"][0]["payload"]
         status = p.get("STATUS", "").strip()
         if status:
-            return _map_status(status)
+            mapped = _map_status(status)
+            # Actively seeking / applied-to-grad / known outcome → return directly
+            if mapped != "Unresolved":
+                return mapped
+            # STATUS present but unrecognized → fall through to check other sources
 
     # 2. LinkedIn
     if student.get("linkedin_data"):
@@ -197,25 +227,39 @@ def _student_outcome(student: dict) -> str:
     if m and m.get("currentActivity"):
         return m["currentActivity"]
 
+    # 5. No known outcome — apply time-based Unresolved vs Unplaced for survey respondents
+    if has_survey_response:
+        recorded_at = student["qualtrics_data"][0].get("recorded_at")
+        if recorded_at:
+            cutoff = _get_term_cutoff(student.get("term", ""))
+            if cutoff:
+                # Normalize timezone-aware datetime for comparison
+                resp = recorded_at.replace(tzinfo=None) if getattr(recorded_at, "tzinfo", None) else recorded_at
+                return "Unplaced" if resp >= cutoff else "Unresolved"
+        # Survey response present but no date → treated as Phase 1 (Unresolved)
+        return "Unresolved"
+
     return "Unresolved"
 
 
 def _student_employer_state(student: dict):
-    """Return (state_full_name, is_employed) from the best available source."""
-    # Qualtrics EMP_CITY1_1 → "City, ST, Country"
+    """Return (state_full_name, is_employed) using EMP_STATE (primary) then EMP_CITY1_1 fallback."""
     if student.get("qualtrics_data"):
         p = student["qualtrics_data"][0]["payload"]
         status = p.get("STATUS", "").strip()
         if "employed" in status.lower() and "seeking" not in status.lower():
+            emp_state = p.get("EMP_STATE", "").strip()
+            if emp_state:
+                return _resolve_state(emp_state), True
             city_str = p.get("EMP_CITY1_1", "").strip()
-            return (_extract_state_from_city_str(city_str) if city_str else "Unreported"), True
+            if city_str:
+                return _extract_state_from_city_str(city_str), True
 
-    # LinkedIn employer_state
     if student.get("linkedin_data"):
         li = student["linkedin_data"][0]["payload"]
         outcome = _student_outcome(student)
         if "employed" in outcome.lower():
-            state = (li.get("employer_state") or "").strip()
+            state   = (li.get("employer_state")   or "").strip()
             country = (li.get("employer_country") or "").strip()
             if state:
                 return _resolve_state(state, country), True
@@ -248,7 +292,6 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         s.get("qualtrics_data") or s.get("linkedin_data") or s.get("clearinghouse_data")
     )]
     survey_count = len(with_survey)
-    known_count  = len(with_any)
 
     # ── Career outcomes — all sources ─────────────────────────────────────────
     outcomes = defaultdict(int)
@@ -260,6 +303,10 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             not_seeking_count += 1
         else:
             outcomes[outcome] += 1
+
+    # Knowledge rate: students with ANY resolved outcome (excl. Unresolved) / total graduates
+    # Includes NOT seeking — we know their outcome; excludes only students with no resolvable data.
+    known_count = total_graduates - outcomes.get("Unresolved", 0)
 
     outcome_order = [
         "Continuing education",
@@ -282,6 +329,16 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         outcomes_table.append({"label": "NOT seeking", "n": not_seeking_count})
 
     employed_count = outcomes.get("Employed full-time", 0) + outcomes.get("Employed part-time", 0)
+
+    # % in workforce: Employed FT/PT + Volunteering + Military + Business
+    # Denominator: grand_total (all resolved outcomes excl. NOT seeking, per spec)
+    in_workforce_count = (
+        outcomes.get("Employed full-time", 0) +
+        outcomes.get("Employed part-time", 0) +
+        outcomes.get("Volunteering or service program", 0) +
+        outcomes.get("Serving in the U.S. Armed Forces", 0) +
+        outcomes.get("Starting a business", 0)
+    )
 
     # ── Students whose outcome is "employed" — for Qualtrics-specific stats ───
     employed_qualtrics = [
@@ -320,12 +377,13 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
 
     # ── Salary (Qualtrics-only) ───────────────────────────────────────────────
     salaries = []
-    bonus_count = 0
+    bonus_values = []   # raw EMP_BONUS amounts for median calculation
+    bonus_list   = []   # full list fallback if median can't be computed
     full_time_salary_respondents = 0
     for s in employed_qualtrics:
         p = s["qualtrics_data"][0]["payload"]
         emp_type = p.get("EMP_TYPE", "").lower()
-        sal      = p.get("EMP_SALARY", "").strip()
+        sal      = (p.get("EMP_SAL_1") or p.get("EMP_SAL") or p.get("EMP_SALARY") or "").strip()
         if "full-time" in emp_type or "full time" in emp_type or "employee" in emp_type:
             full_time_salary_respondents += 1
             if sal:
@@ -333,8 +391,19 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
                 if mid:
                     salaries.append(mid)
         bonus = p.get("EMP_BONUS", "").strip()
-        if bonus and bonus.lower() not in ("", "no", "0"):
-            bonus_count += 1
+        if bonus and bonus.lower() not in ("", "no", "0", "none"):
+            bonus_list.append(bonus)
+            # Try to parse a numeric value for median calculation
+            try:
+                nums = re.findall(r"[\d,]+", bonus)
+                if nums:
+                    bonus_values.append(float(nums[0].replace(",", "")))
+            except (ValueError, IndexError):
+                pass
+
+    bonus_count = len(bonus_list)
+    bonus_sorted = sorted(bonus_values)
+    bonus_median = int(_percentile(bonus_sorted, 50)) if len(bonus_sorted) >= 3 else None
 
     salaries_sorted = sorted(salaries)
     salary_stats = None
@@ -343,6 +412,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             "n_reported":      len(salaries_sorted),
             "n_full_time":     full_time_salary_respondents,
             "bonus_count":     bonus_count,
+            "bonus_median":    bonus_median,
+            "bonus_list":      bonus_list if bonus_median is None else [],
             "p25": int(_percentile(salaries_sorted, 25)),
             "p50": int(_percentile(salaries_sorted, 50)),
             "p75": int(_percentile(salaries_sorted, 75)),
@@ -356,29 +427,38 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         found_any = False
         for i in range(1, 13):
             v = p.get(f"EMP_HOW_{i}", "").strip()
-            if v:
-                emp_how_counts[EMP_HOW_LABEL.get(v, v)] += 1
+            if v and v in EMP_HOW_LABEL:
+                emp_how_counts[EMP_HOW_LABEL[v]] += 1
                 found_any = True
         if found_any:
             emp_how_respondents += 1
     emp_how_table = sorted(emp_how_counts.items(), key=lambda x: -x[1])
 
-    # ── Geographic distribution — Qualtrics + LinkedIn (all sources) ──────────
+    # ── Geographic distribution — FT/PT employed only, EMP_STATE primary ───────
+    # Per spec: only graduates who reported full or part time employment;
+    # based on EMP_STATE column (fall back to extracting from EMP_CITY1_1).
     geo_counts      = defaultdict(int)
     geo_respondents = 0
 
     for s in students:
         outcome = _student_outcome(s)
-        if "employed" not in outcome.lower():
+        # Restrict to FT and PT employed only — exclude volunteering, military, business
+        if outcome not in ("Employed full-time", "Employed part-time"):
             continue
-        # Qualtrics
+        # Qualtrics: prefer EMP_STATE directly, fall back to EMP_CITY1_1 parsing
         if s.get("qualtrics_data"):
-            city_str = s["qualtrics_data"][0]["payload"].get("EMP_CITY1_1", "").strip()
-            if city_str:
-                geo_counts[_extract_state_from_city_str(city_str)] += 1
+            p = s["qualtrics_data"][0]["payload"]
+            emp_state = p.get("EMP_STATE", "").strip()
+            if emp_state:
+                geo_counts[_resolve_state(emp_state)] += 1
                 geo_respondents += 1
-        # LinkedIn
-        if s.get("linkedin_data"):
+            else:
+                city_str = p.get("EMP_CITY1_1", "").strip()
+                if city_str:
+                    geo_counts[_extract_state_from_city_str(city_str)] += 1
+                    geo_respondents += 1
+        # LinkedIn: employer_state + employer_country
+        elif s.get("linkedin_data"):
             li = s["linkedin_data"][0]["payload"]
             state   = (li.get("employer_state")   or "").strip()
             country = (li.get("employer_country") or "").strip()
@@ -417,7 +497,7 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         if s.get("qualtrics_data"):
             p = s["qualtrics_data"][0]["payload"]
             if "service" in p.get("STATUS", "").lower() or "volunteer" in p.get("STATUS", "").lower():
-                org  = p.get("VOL_ORG_1", "").strip()
+                org  = (p.get("VOL_ORG", "") or p.get("VOL_ORG_1", "")).strip()
                 role = p.get("VOL_ROLE",  "").strip()
                 vol_details.append({"org": org or "N/A", "role": role or "N/A"})
         # LinkedIn
@@ -437,18 +517,26 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
     degree_counts      = defaultdict(int)
     cont_edu_programs  = []
 
+    _UNSPECIFIED = {"unspecified", "unknown", "n/a", "na", "none", ""}
+
+    def _blank_or_unspecified(val: str) -> bool:
+        return not val or val.lower().strip() in _UNSPECIFIED
+
     def _add_ce(inst: str, prog: str, deg: str):
         nonlocal cont_edu_umd_count
         inst_clean = inst.split(",")[0].strip() if inst else ""
         if inst and "university of maryland" in inst.lower() and "college park" in inst.lower():
             cont_edu_umd_count += 1
-        if deg:
-            degree_counts[deg] += 1
-        if inst_clean or prog:
+        deg_val = deg if not _blank_or_unspecified(deg) else None
+        if deg_val:
+            degree_counts[deg_val] += 1
+        inst_val = inst_clean if not _blank_or_unspecified(inst_clean) else None
+        prog_val = prog if not _blank_or_unspecified(prog) else None
+        if inst_val or prog_val:
             cont_edu_programs.append({
-                "institution": inst_clean or "Unknown",
-                "program":     prog or "Unknown",
-                "degree":      deg  or "Unknown",
+                "institution": inst_val or "",
+                "program":     prog_val or "",
+                "degree":      deg_val  or "",
             })
 
     for s in students:
@@ -561,33 +649,39 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         intern_avg_wage = sum(intern_hourly_wages) / len(intern_hourly_wages)
         intern_med_wage = _percentile(sorted(intern_hourly_wages), 50)
 
-    # ── Appendix A: Employers — Qualtrics + LinkedIn (all sources) ───────────
+    # ── Appendix A: Employers — filter to FT/PT employed; EMP_ORG + EMP_TITLES ─
+    _BLANK_SET = {"unspecified", "unknown", "n/a", "na", "none", ""}
+
+    def _clean_field(val: str) -> str | None:
+        v = val.strip() if val else ""
+        return v if v.lower() not in _BLANK_SET else None
+
     employer_positions = []
 
     for s in students:
-        # Qualtrics employers
+        outcome = _student_outcome(s)
+        # Qualtrics: filter by STATUS to FT or PT employed
         if s.get("qualtrics_data"):
-            p = s["qualtrics_data"][0]["payload"]
-            emp_type = p.get("EMP_TYPE", "").strip()
-            org      = p.get("EMP_ORG_1", "").strip()
-            title    = p.get("EMP_TITLE", "").strip()
-            if org and title and emp_type:
-                employer_positions.append({
-                    "employer": org.split(",")[0].strip(),
-                    "title":    title,
-                })
-        # LinkedIn employers
-        if s.get("linkedin_data"):
-            outcome = _student_outcome(s)
-            if "employed" in outcome.lower():
-                li    = s["linkedin_data"][0]["payload"]
-                org   = (li.get("name_of_employer") or "").strip()
-                title = (li.get("job_title")        or "").strip()
+            p      = s["qualtrics_data"][0]["payload"]
+            status = p.get("STATUS", "").strip().lower()
+            if "employed full" in status or "employed part" in status:
+                org   = _clean_field(p.get("EMP_ORG",   "") or p.get("EMP_ORG_1",   ""))
+                title = _clean_field(p.get("EMP_TITLES", "") or p.get("EMP_TITLE", ""))
                 if org and title:
                     employer_positions.append({
                         "employer": org.split(",")[0].strip(),
                         "title":    title,
                     })
+        # LinkedIn: outcome must be employed
+        elif s.get("linkedin_data") and "employed" in outcome.lower():
+            li    = s["linkedin_data"][0]["payload"]
+            org   = _clean_field(li.get("name_of_employer") or "")
+            title = _clean_field(li.get("job_title") or "")
+            if org and title:
+                employer_positions.append({
+                    "employer": org.split(",")[0].strip(),
+                    "title":    title,
+                })
 
     employer_positions_sorted = sorted(employer_positions, key=lambda x: x["employer"])
 
@@ -600,9 +694,9 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
     # ── Build and return ───────────────────────────────────────────────────────
     return {
         "meta": {
-            "major":        major_filter or "All Majors",
+            "major":        (", ".join(major_filter) if isinstance(major_filter, list) else major_filter) or "All Majors",
             "school":       school_filter or "All Schools",
-            "term":         term_filter or "All Terms",
+            "term":         (", ".join(term_filter) if isinstance(term_filter, list) else term_filter) or "All Terms",
             "generated_at": datetime.now().isoformat(),
         },
         "totals": {
@@ -617,12 +711,20 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         "outcomes": {
             "table":          outcomes_table,
             "grand_total":    grand_total,
+            # Placement: Placed / (Placed + Unplaced + Unresolved), excl. NOT seeking
             "placement_rate": round(
                 (grand_total - outcomes.get("Unplaced", 0) - outcomes.get("Unresolved", 0)) /
-                max(grand_total - not_seeking_count, 1) * 100, 1
+                max(grand_total, 1) * 100, 1
             ) if grand_total else 0,
-            "employed_count": employed_count,
-            "employed_pct":   round(employed_count / max(grand_total, 1) * 100, 1) if grand_total else 0,
+            "employed_count":     employed_count,
+            "employed_pct":       round(employed_count / max(grand_total, 1) * 100, 1) if grand_total else 0,
+            # % in workforce: Employed FT/PT + Volunteering + Military + Business
+            # Denominator = people with data about them, excl. NOT seeking and Unresolved
+            "in_workforce_count": in_workforce_count,
+            "in_workforce_pct":   round(
+                in_workforce_count /
+                max(grand_total - outcomes.get("Unresolved", 0), 1) * 100, 1
+            ) if grand_total else 0,
         },
         "nature": {
             "respondents":    len(employed_qualtrics),

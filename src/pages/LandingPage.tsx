@@ -678,7 +678,7 @@ export const LandingPage: React.FC = () => {
                 <ArticleIcon sx={{ fontSize: 35, color: 'white' }} />
               </Box>
               <Typography variant="h5" gutterBottom fontWeight={700} color="#1E293B">
-                Major Reports
+                Reports
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.7 }}>
                 Generate comprehensive, publication-ready DOCX reports per major — covering

@@ -74,9 +74,9 @@ export const DataManagementPage = () => {
   const [filters, setFilters] = useState<FilterValues>({
     name: '',
     uid: '',
-    major: '',
+    major: [],
     school: '',
-    term: '',
+    term: [],
     sources: [],
   });
   const [termOptions, setTermOptions] = useState<string[]>([]);
@@ -96,11 +96,15 @@ export const DataManagementPage = () => {
 
   const PAGE_SIZE = 20;
 
-  // Stable serialised key for sources array — avoids array-reference comparison issues in deps
+  // Stable serialised keys for array filters — avoids array-reference comparison issues in deps
   const sourcesKey = filters.sources.join(',');
+  const majorKey = filters.major.join(',');
+  const termKey = filters.term.join(',');
 
   useEffect(() => {
-    api.getTerms().then(setTermOptions).catch(() => {});
+    api.getTerms()
+      .then(setTermOptions)
+      .catch((e) => console.error('Failed to load terms:', e));
   }, []);
 
   // Reset page to 1 whenever any filter value changes
@@ -109,7 +113,7 @@ export const DataManagementPage = () => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     setCurrentPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.name, filters.major, filters.school, filters.term, filters.uid, sourcesKey]);
+  }, [filters.name, majorKey, filters.school, termKey, filters.uid, sourcesKey]);
 
   // Fetch students — uses AbortController to cancel stale in-flight requests
   useEffect(() => {
@@ -124,9 +128,9 @@ export const DataManagementPage = () => {
           limit: PAGE_SIZE,
           offset,
           name: filters.name || undefined,
-          major: filters.major || undefined,
+          major: filters.major.length ? filters.major : undefined,
           school: filters.school || undefined,
-          term: filters.term || undefined,
+          term: filters.term.length ? filters.term : undefined,
           uid: filters.uid || undefined,
           sources: filters.sources.length ? filters.sources : undefined,
         }, controller.signal);
@@ -148,7 +152,7 @@ export const DataManagementPage = () => {
     fetchStudents();
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.name, filters.major, filters.school, filters.term, filters.uid, sourcesKey, currentPage]);
+  }, [filters.name, majorKey, filters.school, termKey, filters.uid, sourcesKey, currentPage]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -295,18 +299,18 @@ export const DataManagementPage = () => {
     setFilters({
       name: '',
       uid: '',
-      major: '',
+      major: [],
       school: '',
-      term: '',
+      term: [],
       sources: [],
     });
   };
 
   const hasActiveFilters = filters.name !== '' ||
                           filters.uid !== '' ||
-                          filters.major !== '' ||
+                          filters.major.length > 0 ||
                           filters.school !== '' ||
-                          filters.term !== '' ||
+                          filters.term.length > 0 ||
                           filters.sources.length > 0;
   const studentsWithMasterData = filteredStudents.filter((s) => s.masterData).length;
 
@@ -448,10 +452,10 @@ export const DataManagementPage = () => {
                       fontSize: { xs: '1.8rem', md: '2.5rem' },
                     }}
                   >
-                    Student Data Dashboard
+                    Student Data
                   </Typography>
                   <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.1rem' }}>
-                    Comprehensive graduate outcomes tracking and management system
+                    UMD Graduation Survey Outcomes Tracking and Management System
                   </Typography>
                 </Box>
               </Box>

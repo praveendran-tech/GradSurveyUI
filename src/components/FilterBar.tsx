@@ -42,28 +42,33 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
 
   const handleSelect = (field: keyof FilterValues) => (event: SelectChangeEvent<string>) => {
     const value = event.target.value;
-
     if (field === 'school') {
-      // Changing school clears major if it doesn't belong to new school
-      const majorStillValid = MAJORS.some(
-        (m) => m.schoolCode === value && m.code === filters.major
-      );
+      // Changing school clears any selected majors that don't belong to new school
+      const validMajorCodes = new Set(MAJORS.filter(m => m.schoolCode === value).map(m => m.code));
       onFilterChange({
         ...filters,
         school: value,
-        major: majorStillValid ? filters.major : '',
-      });
-    } else if (field === 'major') {
-      // Selecting a major auto-selects its school
-      const majorEntry = MAJORS.find((m) => m.code === value);
-      onFilterChange({
-        ...filters,
-        major: value,
-        school: majorEntry ? majorEntry.schoolCode : filters.school,
+        major: value ? filters.major.filter(code => validMajorCodes.has(code)) : filters.major,
       });
     } else {
       onFilterChange({ ...filters, [field]: value });
     }
+  };
+
+  const handleMajorChange = (event: SelectChangeEvent<string[]>) => {
+    const value = event.target.value;
+    onFilterChange({
+      ...filters,
+      major: typeof value === 'string' ? value.split(',') : value,
+    });
+  };
+
+  const handleTermChange = (event: SelectChangeEvent<string[]>) => {
+    const value = event.target.value;
+    onFilterChange({
+      ...filters,
+      term: typeof value === 'string' ? value.split(',') : value,
+    });
   };
 
   const handleSourcesChange = (event: SelectChangeEvent<string[]>) => {
@@ -74,10 +79,11 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
     });
   };
 
-  // Majors filtered by selected school (or all if no school selected)
-  const availableMajors = filters.school
+  // Majors filtered by selected school (or all if no school selected), sorted alphabetically
+  const availableMajors = (filters.school
     ? MAJORS.filter((m) => m.schoolCode === filters.school)
-    : MAJORS;
+    : MAJORS
+  ).slice().sort((a, b) => a.name.localeCompare(b.name));
 
   const fieldSx = {
     '& .MuiOutlinedInput-root': {
@@ -191,20 +197,32 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
           </FormControl>
         </Box>
 
-        {/* Major dropdown — filtered by school */}
+        {/* Major multi-select — filtered by school, sorted A–Z */}
         <Box flex="1 1 280px">
           <FormControl fullWidth size="small" sx={fieldSx}>
-            <InputLabel>Major</InputLabel>
+            <InputLabel id="major-label">Major</InputLabel>
             <Select
+              labelId="major-label"
+              multiple
               value={filters.major}
-              label="Major"
-              onChange={handleSelect('major')}
-              renderValue={(val) => {
-                const entry = MAJORS.find((m) => m.code === val);
-                return entry ? entry.name : val;
-              }}
+              onChange={handleMajorChange}
+              input={<OutlinedInput label="Major" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((code) => {
+                    const entry = MAJORS.find((m) => m.code === code);
+                    return (
+                      <Chip
+                        key={code}
+                        label={entry ? entry.name : code}
+                        size="small"
+                        sx={{ height: 20, fontSize: '0.7rem', bgcolor: 'rgba(226,24,51,0.1)', color: '#E21833' }}
+                      />
+                    );
+                  })}
+                </Box>
+              )}
             >
-              <MenuItem value=""><em>All Majors</em></MenuItem>
               {availableMajors.map((m) => (
                 <MenuItem key={`${m.schoolCode}-${m.code}`} value={m.code}>
                   {m.name}
@@ -214,16 +232,29 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
           </FormControl>
         </Box>
 
-        {/* Term dropdown */}
-        <Box flex="1 1 160px">
+        {/* Term multi-select */}
+        <Box flex="1 1 200px">
           <FormControl fullWidth size="small" sx={fieldSx}>
-            <InputLabel>Term</InputLabel>
+            <InputLabel id="term-label">Term</InputLabel>
             <Select
+              labelId="term-label"
+              multiple
               value={filters.term}
-              label="Term"
-              onChange={handleSelect('term')}
+              onChange={handleTermChange}
+              input={<OutlinedInput label="Term" />}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {selected.map((t) => (
+                    <Chip
+                      key={t}
+                      label={t}
+                      size="small"
+                      sx={{ height: 20, fontSize: '0.7rem', bgcolor: 'rgba(226,24,51,0.1)', color: '#E21833' }}
+                    />
+                  ))}
+                </Box>
+              )}
             >
-              <MenuItem value=""><em>All Terms</em></MenuItem>
               {termOptions.map((t) => (
                 <MenuItem key={t} value={t}>{t}</MenuItem>
               ))}

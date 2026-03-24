@@ -63,6 +63,7 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
       'ExternalDataReference',
       'EndDate',
       'STATUS',
+      'Qualtrics',
       'STBUS_ORG',
       'STBUS_CONTACT',
       'STBUS_PURPOSE',
@@ -259,8 +260,10 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
   const renderClearingHouseData = (clearingHouseData: ClearingHouseRecord) => {
     // Only show these specific fields from the AWS headers reference
     const allowedFields = [
-      'Requester Return Field',
+      'Enrollment End Date',
       'College Name',
+      'ClearingHouse',
+      'Requester Return Field',
       'College State',
       'Enrollment Major 1',
       'Class Level',

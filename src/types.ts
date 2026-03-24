@@ -89,8 +89,8 @@ export interface MasterData {
 export interface FilterValues {
   name: string;
   uid: string;
-  major: string;
+  major: string[];
   school: string;
-  term: string;
+  term: string[];
   sources: string[]; // Multiple selection: 'qualtrics', 'linkedin', 'clearinghouse'
 }

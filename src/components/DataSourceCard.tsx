@@ -133,7 +133,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
             {isSelected && (
               <Chip
                 icon={<CheckCircleIcon />}
-                label="Selected"
+                label="Approved"
                 color="primary"
                 size="small"
               />
@@ -162,7 +162,7 @@ export const DataSourceCard: React.FC<DataSourceCardProps> = ({
             onClick={() => onSelect(type)}
             disabled={isSelected || disabled}
           >
-            {isSelected ? 'Selected' : disabled ? 'Saving…' : 'Select'}
+            {isSelected ? 'Approved' : disabled ? 'Saving…' : 'Approve'}
           </Button>
         </CardActions>
       </Card>

@@ -45,9 +45,9 @@ def read_root():
 @app.get("/api/students")
 def get_all_students(
     name: Optional[str] = None,
-    major: Optional[str] = None,
+    major: Optional[List[str]] = Query(default=None),
     school: Optional[str] = None,
-    term: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
     uid: Optional[str] = None,
     sources: Optional[List[str]] = Query(default=None),
     limit: Optional[int] = 20,
@@ -170,9 +170,9 @@ def get_unique_terms():
 
 @app.get("/api/export")
 def export_master_records(
-    major: Optional[str] = None,
+    major: Optional[List[str]] = Query(default=None),
     school: Optional[str] = None,
-    term: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
 ):
     """Return all records from analytics.master_graduate_outcomes for CSV export."""
     try:
@@ -194,9 +194,9 @@ def export_master_records(
 
 @app.get("/api/report/data")
 def get_report_data(
-    major: Optional[str] = None,
+    major: Optional[List[str]] = Query(default=None),
     school: Optional[str] = None,
-    term: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
 ):
     """Return aggregated JSON statistics for the report preview."""
     try:
@@ -212,9 +212,9 @@ def get_report_data(
 
 @app.get("/api/report/download")
 def download_report(
-    major: Optional[str] = None,
+    major: Optional[List[str]] = Query(default=None),
     school: Optional[str] = None,
-    term: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
 ):
     """Generate and stream a DOCX report file."""
     try:
@@ -225,8 +225,8 @@ def download_report(
         )
         docx_bytes = report_module.generate_report_docx(data)
 
-        major_part = (major or "AllMajors").replace(" ", "_")
-        term_part = (term or "AllTerms").replace(" ", "_")
+        major_part = ("_".join(major) if major else "AllMajors").replace(" ", "_")
+        term_part = ("_".join(term) if term else "AllTerms").replace(" ", "_")
         date_part = datetime.now().strftime("%Y%m%d")
         filename = f"GradOutcomesReport_{major_part}_{term_part}_{date_part}.docx"
 

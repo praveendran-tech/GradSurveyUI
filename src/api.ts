@@ -4,9 +4,9 @@ const API_BASE_URL = '/api';
 
 interface GetStudentsParams {
   name?: string;
-  major?: string;
+  major?: string[];
   school?: string;
-  term?: string;
+  term?: string[];
   uid?: string;
   sources?: string[];
   limit?: number;
@@ -29,9 +29,9 @@ export const api = {
   async getStudents(params?: GetStudentsParams, signal?: AbortSignal): Promise<GetStudentsResponse> {
     const queryParams = new URLSearchParams();
     if (params?.name) queryParams.append('name', params.name);
-    if (params?.major) queryParams.append('major', params.major);
+    if (params?.major?.length) params.major.forEach(m => queryParams.append('major', m));
     if (params?.school) queryParams.append('school', params.school);
-    if (params?.term) queryParams.append('term', params.term);
+    if (params?.term?.length) params.term.forEach(t => queryParams.append('term', t));
     if (params?.uid) queryParams.append('uid', params.uid);
     if (params?.sources?.length) params.sources.forEach(s => queryParams.append('sources', s));
     if (params?.limit !== undefined) queryParams.append('limit', params.limit.toString());
@@ -165,11 +165,11 @@ export const api = {
   /**
    * Fetch aggregated report statistics (JSON preview)
    */
-  async getReportData(params: { major?: string; school?: string; term?: string }): Promise<Record<string, unknown>> {
+  async getReportData(params: { major?: string[]; school?: string; term?: string[] }): Promise<Record<string, unknown>> {
     const q = new URLSearchParams();
-    if (params.major) q.append('major', params.major);
+    params.major?.forEach((m) => q.append('major', m));
     if (params.school) q.append('school', params.school);
-    if (params.term) q.append('term', params.term);
+    params.term?.forEach((t) => q.append('term', t));
     const url = `${API_BASE_URL}/report/data${q.toString() ? '?' + q.toString() : ''}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch report data: ${response.statusText}`);
@@ -179,11 +179,11 @@ export const api = {
   /**
    * Fetch export records from analytics.master_graduate_outcomes
    */
-  async getExportRecords(params?: { major?: string; school?: string; term?: string }): Promise<{ count: number; records: Record<string, unknown>[] }> {
+  async getExportRecords(params?: { major?: string[]; school?: string; term?: string[] }): Promise<{ count: number; records: Record<string, unknown>[] }> {
     const q = new URLSearchParams();
-    if (params?.major) q.append('major', params.major);
+    params?.major?.forEach((m) => q.append('major', m));
     if (params?.school) q.append('school', params.school);
-    if (params?.term) q.append('term', params.term);
+    params?.term?.forEach((t) => q.append('term', t));
     const url = `${API_BASE_URL}/export${q.toString() ? '?' + q.toString() : ''}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch export data: ${response.statusText}`);
@@ -193,11 +193,11 @@ export const api = {
   /**
    * Build the download URL for a DOCX report (returns URL string, not a fetch)
    */
-  getReportDownloadUrl(params: { major?: string; school?: string; term?: string }): string {
+  getReportDownloadUrl(params: { major?: string[]; school?: string; term?: string[] }): string {
     const q = new URLSearchParams();
-    if (params.major) q.append('major', params.major);
+    params.major?.forEach((m) => q.append('major', m));
     if (params.school) q.append('school', params.school);
-    if (params.term) q.append('term', params.term);
+    params.term?.forEach((t) => q.append('term', t));
     return `${API_BASE_URL}/report/download${q.toString() ? '?' + q.toString() : ''}`;
   },
 };
