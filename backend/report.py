@@ -61,17 +61,17 @@ EMP_HOW_LABEL = {
 
 OTHEREXP_LABEL = {
     "OTHEREXP_77": "Part-time employment – on or off campus",
-    "OTHEREXP_79": "Full-time employment – on or off campus",
+    "OTHEREXP_78": "Full-time employment – on or off campus",
     "OTHEREXP_81": "Research program(s) or projects",
-    "OTHEREXP_85": "Clinical or hospital experience",
-    "OTHEREXP_86": "Clinical or hospital experience (rotation)",
-    "OTHEREXP_87": "Study or work abroad",
+    "OTHEREXP_83": "Early field experience / student teaching",
+    "OTHEREXP_84": "Clinical or hospital experience",
+    "OTHEREXP_86": "Study or work abroad",
     "OTHEREXP_89": "Community service-learning / volunteer",
+    "OTHEREXP_90": "Student group leadership",
     "OTHEREXP_91": "Student group membership",
-    "OTHEREXP_93": "Early field experience / student teaching",
+    "OTHEREXP_92": "Terrapin Teachers",
     "OTHEREXP_94": "Other experience",
     "OTHEREXP_95": "None of the above",
-    "OTHEREXP_96": "Student group leadership",
 }
 
 STATE_ABBR = {
@@ -442,8 +442,9 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
 
     for s in students:
         outcome = _student_outcome(s)
-        # Restrict to FT and PT employed only — exclude volunteering, military, business
-        if outcome not in ("Employed full-time", "Employed part-time"):
+        # Per spec: FT/PT employed, military, and business starters
+        if outcome not in ("Employed full-time", "Employed part-time",
+                           "Serving in the U.S. Armed Forces", "Starting a business"):
             continue
         # Qualtrics: prefer EMP_STATE directly, fall back to EMP_CITY1_1 parsing
         if s.get("qualtrics_data"):
@@ -598,6 +599,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
     intern_two_plus         = 0
     intern_paid_count       = 0
     intern_credit_count     = 0
+    intern_paid_students    = 0   # students with ≥1 paid internship
+    intern_credit_students  = 0   # students with ≥1 credit internship
     total_internships_reported = 0
     intern_hourly_wages     = []
     intern_list             = []
@@ -619,6 +622,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             if nin >= 2:
                 intern_two_plus += 1
 
+        student_had_paid   = False
+        student_had_credit = False
         for i in range(1, nin + 1):
             org     = p.get(f"{i}_INT_ORG_1",  "").strip()
             title   = p.get(f"{i}_INT_TITLE",  "").strip()
@@ -629,8 +634,12 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             is_paid   = paid.lower().startswith("yes") if paid else False
             is_credit = credit.lower() == "yes" if credit else False
 
-            if is_paid:   intern_paid_count += 1
-            if is_credit: intern_credit_count += 1
+            if is_paid:
+                intern_paid_count += 1
+                student_had_paid = True
+            if is_credit:
+                intern_credit_count += 1
+                student_had_credit = True
             if howmuch:
                 try:
                     intern_hourly_wages.append(float(howmuch))
@@ -643,6 +652,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
                     "paid":   "Paid" if is_paid else "Unpaid",
                     "credit": "Yes" if is_credit else "No",
                 })
+        if student_had_paid:   intern_paid_students += 1
+        if student_had_credit: intern_credit_students += 1
 
     intern_avg_wage = intern_med_wage = None
     if intern_hourly_wages:
@@ -657,9 +668,14 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         return v if v.lower() not in _BLANK_SET else None
 
     employer_positions = []
+    _seen_employer_uids: set = set()
 
     for s in students:
+        uid     = s.get("uid", "")
         outcome = _student_outcome(s)
+        # Deduplicate: one entry per student (uid) — skip if already recorded
+        if uid and uid in _seen_employer_uids:
+            continue
         # Qualtrics: filter by STATUS to FT or PT employed
         if s.get("qualtrics_data"):
             p      = s["qualtrics_data"][0]["payload"]
@@ -672,6 +688,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
                         "employer": org.split(",")[0].strip(),
                         "title":    title,
                     })
+                    if uid:
+                        _seen_employer_uids.add(uid)
         # LinkedIn: outcome must be employed
         elif s.get("linkedin_data") and "employed" in outcome.lower():
             li    = s["linkedin_data"][0]["payload"]
@@ -682,12 +700,23 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
                     "employer": org.split(",")[0].strip(),
                     "title":    title,
                 })
+                if uid:
+                    _seen_employer_uids.add(uid)
 
     employer_positions_sorted = sorted(employer_positions, key=lambda x: x["employer"])
 
     # ── Appendix B: CE programs — Qualtrics + Clearinghouse + LinkedIn ────────
+    # Deduplicate by (institution, program) key
+    _seen_ce: set = set()
+    cont_edu_programs_deduped = []
+    for prog in cont_edu_programs:
+        key = (prog["institution"].lower(), prog["program"].lower())
+        if key not in _seen_ce:
+            _seen_ce.add(key)
+            cont_edu_programs_deduped.append(prog)
+
     cont_edu_programs_sorted = sorted(
-        cont_edu_programs,
+        cont_edu_programs_deduped,
         key=lambda x: (x["institution"], x["program"]),
     )
 
@@ -760,6 +789,8 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             "two_plus":         intern_two_plus,
             "paid_count":       intern_paid_count,
             "credit_count":     intern_credit_count,
+            "paid_students":    intern_paid_students,
+            "credit_students":  intern_credit_students,
             "total_reported":   total_internships_reported,
             "avg_hourly_wage":  round(intern_avg_wage, 2) if intern_avg_wage else None,
             "median_hourly_wage": round(intern_med_wage, 2) if intern_med_wage else None,
@@ -1159,12 +1190,12 @@ def generate_report_docx(data: dict) -> bytes:
         if internships["with_any"]:
             _body_text(doc, f"Out of the {internships['with_any']} respondents who had at least one internship:")
             _bullet(doc,
-                f"Paid internships: {_pct(internships['paid_count'], internships['total_reported'])} "
-                f"of reported internships ({internships['paid_count']}) were paid.")
+                f"Paid internships: {_pct(internships['paid_students'], totals['total_graduates'])} "
+                f"of graduates ({internships['paid_students']}) had at least one paid internship.")
             _bullet(doc,
                 f"Internships for academic credit: "
-                f"{_pct(internships['credit_count'], internships['total_reported'])} of reported "
-                f"internships ({internships['credit_count']}) were for academic credit.")
+                f"{_pct(internships['credit_students'], totals['total_graduates'])} of graduates "
+                f"({internships['credit_students']}) had at least one internship for academic credit.")
     else:
         _body_text(doc, "Insufficient data to report internship participation.")
 

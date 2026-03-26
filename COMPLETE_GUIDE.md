@@ -567,7 +567,7 @@ Right now, your server has a temporary internet address that changes every time 
 1. In the EC2 left sidebar, scroll down to **"Network & Security"** → click **"Elastic IPs"**
 2. Click **"Allocate Elastic IP address"**
 3. Leave all settings as-is → click **"Allocate"**
-4. A new IP address appears (e.g., `54.123.45.67`) — **write this number down**. This is your server's permanent address.
+4. A new IP address appears (e.g., `3.81.38.238`) — **write this number down**. This is your server's permanent address.
 5. Check the checkbox next to the new IP
 6. Click **"Actions"** → **"Associate Elastic IP address"**
 7. Under "Instance", click the dropdown and select `GradSurvey`
@@ -606,18 +606,18 @@ You will now log into your cloud server remotely using SSH. This is like remote-
 1. Open your Terminal application
 2. Make the key file secure (required by SSH — it won't work otherwise):
    ```bash
-   chmod 400 ~/Downloads/gradsurvey-key.pem
+   chmod 400 ~/Desktop/gradsurvey-key.pem
    ```
-   *(If you moved the .pem file, replace `~/Downloads/` with the actual path)*
+   *(The key file is stored at `~/Desktop/gradsurvey-key.pem`. If you have moved it, update the path.)*
 
-3. Connect to the server (replace `YOUR_EC2_IP` with the Elastic IP from step 4.3):
+3. Connect to the server:
    ```bash
-   ssh -i ~/Downloads/gradsurvey-key.pem ubuntu@YOUR_EC2_IP
+   ssh -i ~/Desktop/gradsurvey-key.pem ubuntu@3.81.38.238
    ```
 
 4. The first time you connect, you will see a message like:
    ```
-   The authenticity of host '54.123.45.67' can't be established.
+   The authenticity of host '3.81.38.238' can't be established.
    Are you sure you want to continue connecting (yes/no)?
    ```
    Type `yes` and press Enter.
@@ -686,12 +686,12 @@ You need to copy the application code from your local computer to the server.
 
 **On Mac:**
 
-Run this command from your local terminal (replace `YOUR_EC2_IP`):
+Run this command from your local terminal (replace `3.81.38.238`):
 ```bash
 rsync -avz --exclude='node_modules' --exclude='dist' --exclude='backend/venv' \
-  -e "ssh -i ~/Downloads/gradsurvey-key.pem" \
+  -e "ssh -i ~/Desktop/gradsurvey-key.pem" \
   ~/Desktop/GradSurveyUI/ \
-  ubuntu@YOUR_EC2_IP:/home/ubuntu/GradSurveyUI/
+  ubuntu@3.81.38.238:/home/ubuntu/GradSurveyUI/
 ```
 
 This copies the entire project folder to the server, but skips the large `node_modules`, `dist`, and `venv` folders (these will be generated on the server itself). The upload may take 1–2 minutes depending on your internet speed.
@@ -701,7 +701,7 @@ This copies the entire project folder to the server, but skips the large `node_m
 rsync -avz --exclude='node_modules' --exclude='dist' --exclude='backend/venv' \
   -e "ssh -i /c/Users/YourName/Downloads/gradsurvey-key.pem" \
   /c/Users/YourName/Desktop/GradSurveyUI/ \
-  ubuntu@YOUR_EC2_IP:/home/ubuntu/GradSurveyUI/
+  ubuntu@3.81.38.238:/home/ubuntu/GradSurveyUI/
 ```
 
 When the command finishes, you should see a summary listing all the files transferred.
@@ -933,7 +933,7 @@ You should see `HTTP/1.1 200 OK`.
 
 Open a web browser and type your server's Elastic IP address in the address bar:
 ```
-http://YOUR_EC2_IP
+http://3.81.38.238
 ```
 
 You should see the UMD Graduate Survey landing page with the UMD logo and navigation. If you see it, deployment is complete.
@@ -955,14 +955,14 @@ When a developer makes changes to the application code, you need to re-upload th
 Run this from your **local terminal** (not SSH):
 ```bash
 rsync -avz --exclude='node_modules' --exclude='dist' --exclude='backend/venv' \
-  -e "ssh -i ~/Downloads/gradsurvey-key.pem" \
+  -e "ssh -i ~/Desktop/gradsurvey-key.pem" \
   ~/Desktop/GradSurveyUI/ \
-  ubuntu@YOUR_EC2_IP:/home/ubuntu/GradSurveyUI/
+  ubuntu@3.81.38.238:/home/ubuntu/GradSurveyUI/
 ```
 
 **Step 2 — Connect to the server via SSH:**
 ```bash
-ssh -i ~/Downloads/gradsurvey-key.pem ubuntu@YOUR_EC2_IP
+ssh -i ~/Desktop/gradsurvey-key.pem ubuntu@3.81.38.238
 ```
 
 **Step 3 — Rebuild the frontend:**
@@ -1104,7 +1104,7 @@ Look at the `/` row. The "Use%" column shows how full the disk is. If it exceeds
 1. Check that the EC2 instance is running: EC2 → Instances → Instance State = "Running"
 2. Check the Elastic IP is still associated: EC2 → Elastic IPs
 3. Verify firewall allows port 80: EC2 → Security Groups → Inbound rules
-4. Try pinging the IP from your terminal: `ping YOUR_EC2_IP`
+4. Try pinging the IP from your terminal: `ping 3.81.38.238`
 
 ### "The page loads but shows no student data"
 
@@ -1136,7 +1136,7 @@ The frontend was not built, or the `dist/` folder is missing.
 1. Check that port 22 is open in the Security Group
 2. Verify the instance is running (not stopped)
 3. Make sure you are using the correct `.pem` file and IP address
-4. Run `chmod 400 ~/Downloads/gradsurvey-key.pem` on Mac if you get a "permissions" error
+4. Run `chmod 400 ~/Desktop/gradsurvey-key.pem` on Mac/Linux if you get a "permissions" error
 
 ### "npm install fails with out-of-memory error"
 
@@ -1260,9 +1260,9 @@ npm run dev
 ```bash
 # From LOCAL terminal — upload files
 rsync -avz --exclude='node_modules' --exclude='dist' --exclude='backend/venv' \
-  -e "ssh -i ~/Downloads/gradsurvey-key.pem" \
+  -e "ssh -i ~/Desktop/gradsurvey-key.pem" \
   ~/Desktop/GradSurveyUI/ \
-  ubuntu@YOUR_EC2_IP:/home/ubuntu/GradSurveyUI/
+  ubuntu@3.81.38.238:/home/ubuntu/GradSurveyUI/
 
 # From SSH terminal — rebuild and restart
 cd /home/ubuntu/GradSurveyUI
