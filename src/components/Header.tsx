@@ -1,10 +1,12 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, AppBar, Toolbar, Button, Stack } from '@mui/material';
 import smallerLogo from '/Smaller_logo-0ftU-IPl.png';
 
 export const Header: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const active = (path: string) => location.pathname === path;
 
   return (
     <>
@@ -42,65 +44,34 @@ export const Header: React.FC = () => {
               onClick={() => window.open('https://careers.umd.edu/', '_blank')}
             />
           </Box>
-          <Stack direction="row" spacing={2}>
-            <Button
-              onClick={() => navigate('/')}
-              sx={{
-                color: '#1E293B',
-                fontWeight: 600,
-                textTransform: 'none',
-                '&:hover': {
-                  color: '#E21833',
-                  background: 'rgba(226, 24, 51, 0.05)',
-                },
-              }}
-            >
-              Home
-            </Button>
-            <Button
-              onClick={() => navigate('/manage')}
-              sx={{
-                color: '#1E293B',
-                fontWeight: 600,
-                textTransform: 'none',
-                '&:hover': {
-                  color: '#E21833',
-                  background: 'rgba(226, 24, 51, 0.05)',
-                },
-              }}
-            >
-              Student Data
-            </Button>
-            <Button
-              onClick={() => navigate('/download')}
-              sx={{
-                color: '#1E293B',
-                fontWeight: 600,
-                textTransform: 'none',
-                '&:hover': {
-                  color: '#E21833',
-                  background: 'rgba(226, 24, 51, 0.05)',
-                },
-              }}
-            >
-              Export
-            </Button>
-            <Button
-              onClick={() => navigate('/report')}
-              sx={{
-                color: 'white',
-                fontWeight: 700,
-                textTransform: 'none',
-                bgcolor: '#E21833',
-                borderRadius: 2,
-                px: 2,
-                '&:hover': {
-                  bgcolor: '#C41230',
-                },
-              }}
-            >
-              Reports
-            </Button>
+          <Stack direction="row" spacing={1}>
+            {[
+              { label: 'Home',         path: '/' },
+              { label: 'Student Data', path: '/manage' },
+              { label: 'Export',       path: '/download' },
+              { label: 'Dashboard',    path: '/dashboard' },
+              { label: 'Reports',      path: '/report' },
+            ].map(({ label, path }) => (
+              <Button
+                key={path}
+                onClick={() => navigate(path)}
+                sx={{
+                  color: path === '/report' ? 'white' : active(path) ? '#E21833' : '#1E293B',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  borderRadius: 2,
+                  px: 2,
+                  borderBottom: active(path) && path !== '/report' ? '2px solid #E21833' : '2px solid transparent',
+                  bgcolor: path === '/report' ? (active(path) ? '#C41230' : '#E21833') : 'transparent',
+                  '&:hover': {
+                    color: path === '/report' ? 'white' : '#E21833',
+                    bgcolor: path === '/report' ? '#C41230' : 'rgba(226,24,51,0.05)',
+                  },
+                }}
+              >
+                {label}
+              </Button>
+            ))}
           </Stack>
         </Toolbar>
       </AppBar>

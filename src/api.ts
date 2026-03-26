@@ -177,6 +177,20 @@ export const api = {
   },
 
   /**
+   * Fetch per-major outcome stats for Major Analytics tab
+   */
+  async getMajorComparison(params: { major?: string[]; school?: string; term?: string[] }): Promise<{ majors: Record<string, unknown>[] }> {
+    const q = new URLSearchParams();
+    params.major?.forEach((m) => q.append('major', m));
+    if (params.school) q.append('school', params.school);
+    params.term?.forEach((t) => q.append('term', t));
+    const url = `/api/dashboard/majors${q.toString() ? '?' + q.toString() : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch major data: ${response.statusText}`);
+    return response.json();
+  },
+
+  /**
    * Fetch export records from analytics.master_graduate_outcomes
    */
   async getExportRecords(params?: { major?: string[]; school?: string; term?: string[] }): Promise<{ count: number; records: Record<string, unknown>[] }> {
@@ -187,6 +201,20 @@ export const api = {
     const url = `${API_BASE_URL}/export${q.toString() ? '?' + q.toString() : ''}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch export data: ${response.statusText}`);
+    return response.json();
+  },
+
+  /**
+   * Fetch comprehensive longitudinal dashboard data
+   */
+  async getDashboardData(params: { major?: string[]; school?: string; term?: string[] }): Promise<Record<string, unknown>> {
+    const q = new URLSearchParams();
+    params.major?.forEach((m) => q.append('major', m));
+    if (params.school) q.append('school', params.school);
+    params.term?.forEach((t) => q.append('term', t));
+    const url = `${API_BASE_URL}/dashboard${q.toString() ? '?' + q.toString() : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch dashboard data: ${response.statusText}`);
     return response.json();
   },
 

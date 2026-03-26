@@ -1258,3 +1258,132 @@ def generate_report_docx(data: dict) -> bytes:
     doc.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+# ── Dashboard longitudinal aggregation ────────────────────────────────────────
+
+def aggregate_dashboard_data(
+    major_filter=None,
+    school_filter=None,
+    term_filter=None,
+):
+    """Aggregate comprehensive dashboard data including per-term longitudinal trends."""
+    import database as _db
+
+    # Overall summary (all selected terms combined)
+    overall = aggregate_report_data(major_filter, school_filter, term_filter)
+
+    # Per-term longitudinal breakdowns
+    all_terms = sorted(_db.get_distinct_terms())
+    if term_filter:
+        all_terms = [t for t in all_terms if t in term_filter]
+
+    longitudinal = []
+    for term in all_terms:
+        td = aggregate_report_data(major_filter, school_filter, [term])
+        total_grads = td["totals"]["total_graduates"]
+        if total_grads == 0:
+            continue
+        sal  = td.get("salary") or {}
+        intn = td.get("internships") or {}
+        longitudinal.append({
+            "term":                 term,
+            "total_graduates":      total_grads,
+            "placement_rate":       td["outcomes"]["placement_rate"],
+            "knowledge_rate":       td["totals"]["knowledge_rate"],
+            "survey_response_rate": td["totals"]["survey_response_rate"],
+            "in_workforce_pct":     td["outcomes"]["in_workforce_pct"],
+            "salary_p25":           sal.get("p25"),
+            "salary_p50":           sal.get("p50"),
+            "salary_p75":           sal.get("p75"),
+            "internship_pct":       round(intn.get("paid_students", 0) / total_grads * 100, 1),
+            "outcomes":             {row["label"]: row["n"] for row in td["outcomes"]["table"]},
+        })
+
+    # Per-school comparison (skip when a school is already selected)
+    school_comparison = []
+    if not school_filter:
+        for school in sorted(_db.get_distinct_values("major1_coll")):
+            sd = aggregate_report_data(major_filter, school, term_filter)
+            if sd["totals"]["total_graduates"] == 0:
+                continue
+            school_comparison.append({
+                "school":           school,
+                "total":            sd["totals"]["total_graduates"],
+                "placement_rate":   sd["outcomes"]["placement_rate"],
+                "knowledge_rate":   sd["totals"]["knowledge_rate"],
+                "in_workforce_pct": sd["outcomes"]["in_workforce_pct"],
+            })
+
+    return {
+        "overall":           overall,
+        "longitudinal":      longitudinal,
+        "school_comparison": school_comparison,
+    }
+
+
+def aggregate_major_comparison(
+    major_filter=None,
+    school_filter=None,
+    term_filter=None,
+):
+    """Per-major outcome stats for the Major Analytics dashboard tab."""
+    students = database.get_students_with_data(
+        limit=None, offset=None,
+        major_filter=major_filter,
+        school_filter=school_filter,
+        term_filter=term_filter,
+    )
+
+    from collections import defaultdict
+
+    major_groups: dict = defaultdict(list)
+    for s in students:
+        major  = (s.get("major")  or "Unknown").strip()
+        school = (s.get("school") or "").strip()
+        major_groups[(major, school)].append(s)
+
+    results = []
+    for (major, school), group in sorted(major_groups.items(), key=lambda x: -len(x[1])):
+        if len(group) < 3:
+            continue
+
+        outcomes_list   = [_student_outcome(s) for s in group]
+        not_seeking_cnt = sum(1 for o in outcomes_list if o == "NOT seeking")
+        known_cnt       = sum(1 for o in outcomes_list if o != "Unresolved")
+        placed_cnt      = sum(1 for o in outcomes_list if o not in ("Unresolved", "Unplaced", "NOT seeking"))
+        workforce_cnt   = sum(1 for o in outcomes_list if o in (
+            "Employed full-time", "Employed part-time",
+            "Serving in the U.S. Armed Forces", "Starting a business",
+            "Volunteering or service program",
+        ))
+
+        salaries = []
+        for s in group:
+            if s.get("qualtrics_data"):
+                p   = s["qualtrics_data"][0]["payload"]
+                sal = (p.get("EMP_SAL_1") or p.get("EMP_SAL") or p.get("EMP_SALARY") or "").strip()
+                if sal:
+                    mid = _parse_salary_midpoint(sal)
+                    if mid:
+                        salaries.append(mid)
+
+        sal_sorted = sorted(salaries)
+        denom = max(known_cnt - not_seeking_cnt, 1)
+
+        results.append({
+            "major":           major,
+            "school":          school,
+            "total":           len(group),
+            "placed":          placed_cnt,
+            "known":           known_cnt,
+            "in_workforce":    workforce_cnt,
+            "placement_rate":  round(placed_cnt / denom * 100, 1),
+            "knowledge_rate":  round(known_cnt  / len(group) * 100, 1),
+            "in_workforce_pct": round(workforce_cnt / max(known_cnt, 1) * 100, 1),
+            "salary_p25":      int(_percentile(sal_sorted, 25)) if len(sal_sorted) >= 3 else None,
+            "salary_median":   int(_percentile(sal_sorted, 50)) if len(sal_sorted) >= 3 else None,
+            "salary_p75":      int(_percentile(sal_sorted, 75)) if len(sal_sorted) >= 3 else None,
+        })
+
+    return sorted(results, key=lambda x: -x["total"])

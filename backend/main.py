@@ -242,3 +242,39 @@ def download_report(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+@app.get("/api/dashboard")
+def get_dashboard_data(
+    major: Optional[List[str]] = Query(default=None),
+    school: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
+):
+    """Return comprehensive longitudinal dashboard data."""
+    try:
+        data = report_module.aggregate_dashboard_data(
+            major_filter=major,
+            school_filter=school,
+            term_filter=term,
+        )
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
+
+
+@app.get("/api/dashboard/majors")
+def get_major_comparison(
+    major: Optional[List[str]] = Query(default=None),
+    school: Optional[str] = None,
+    term: Optional[List[str]] = Query(default=None),
+):
+    """Per-major outcome stats for the Major Analytics dashboard tab."""
+    try:
+        data = report_module.aggregate_major_comparison(
+            major_filter=major,
+            school_filter=school,
+            term_filter=term,
+        )
+        return {"majors": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Major analytics error: {str(e)}")
