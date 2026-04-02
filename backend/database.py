@@ -62,12 +62,16 @@ def _build_demo_where(name_filter, major_filter, school_filter, term_filter,
         if 'qualtrics' in sources_filter:
             source_clauses.append(
                 "EXISTS (SELECT 1 FROM src.src_qualtrics_response qf "
-                "WHERE qf.student_key::text = d.uid::text)"
+                "WHERE qf.student_key::text = d.uid::text "
+                "AND qf.payload->>'STATUS' IS NOT NULL AND qf.payload->>'STATUS' != '')"
             )
         if 'linkedin' in sources_filter:
             source_clauses.append(
                 "EXISTS (SELECT 1 FROM src.src_linkedin_position lf "
-                "WHERE lf.student_key::text = d.uid::text)"
+                "WHERE lf.student_key::text = d.uid::text "
+                "AND (lf.payload->>'linkedin_url' IS NOT NULL AND lf.payload->>'linkedin_url' != '' "
+                "  OR lf.payload->>'url' IS NOT NULL AND lf.payload->>'url' != '' "
+                "  OR lf.payload->>'profile_url' IS NOT NULL AND lf.payload->>'profile_url' != ''))"
             )
         if 'clearinghouse' in sources_filter:
             source_clauses.append(
@@ -77,9 +81,13 @@ def _build_demo_where(name_filter, major_filter, school_filter, term_filter,
         if 'no-source' in sources_filter:
             source_clauses.append(
                 "(NOT EXISTS (SELECT 1 FROM src.src_qualtrics_response qf "
-                "WHERE qf.student_key::text = d.uid::text) "
+                "WHERE qf.student_key::text = d.uid::text "
+                "AND qf.payload->>'STATUS' IS NOT NULL AND qf.payload->>'STATUS' != '') "
                 "AND NOT EXISTS (SELECT 1 FROM src.src_linkedin_position lf "
-                "WHERE lf.student_key::text = d.uid::text) "
+                "WHERE lf.student_key::text = d.uid::text "
+                "AND (lf.payload->>'linkedin_url' IS NOT NULL AND lf.payload->>'linkedin_url' != '' "
+                "  OR lf.payload->>'url' IS NOT NULL AND lf.payload->>'url' != '' "
+                "  OR lf.payload->>'profile_url' IS NOT NULL AND lf.payload->>'profile_url' != '')) "
                 "AND NOT EXISTS (SELECT 1 FROM src.src_clearinghouse_record cf "
                 "WHERE cf.student_key::text = d.uid::text))"
             )
@@ -388,7 +396,7 @@ def _extract_qualtrics(payload: dict, recorded_at=None) -> dict:
         'outcome_recorded_date':            recorded_at,
         'employer_name':                    _v((payload.get('EMP_ORG_1') or '').split(',')[0]),
         'job_title':                        _v(payload.get('EMP_TITLE')),
-        'employment_modality':              _v(payload.get('EMP_TYPE')),
+        'employment_modality':              _v(payload.get('EMP_JOBSITE')),
         'employer_city':                    emp_city,
         'employer_state':                   emp_state,
         'employer_country':                 emp_country,

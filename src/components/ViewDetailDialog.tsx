@@ -67,17 +67,17 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
       'STBUS_ORG',
       'STBUS_CONTACT',
       'STBUS_PURPOSE',
-      'STBUS_YRSTARTED',
-      'VOL_ORG',
+      'STBUS_YEAR',
+      'VOL_ORG_1',
       'VOL_COUNTRY',
       'MIL_BRANCH',
       'MIL_RANK',
-      'CONTEDU_INST',
+      'CONTEDU_INST_1',
       'CONTEDU_PROGRAM',
       'CONTEDU_DEGREE',
       'EMP_JobSite',
-      'EMP_ORG',
-      'EMP_CITY',
+      'EMP_ORG_1',
+      'EMP_CITY1_1',
       'EMP_STATE',
       'EMP_COUNTRY',
       'EMP_TITLE',
@@ -260,19 +260,77 @@ export const ViewDetailDialog: React.FC<ViewDetailDialogProps> = ({
   const renderClearingHouseData = (clearingHouseData: ClearingHouseRecord) => {
     // Only show these specific fields from the AWS headers reference
     const allowedFields = [
-      'Enrollment End Date',
       'College Name',
-      'ClearingHouse',
       'Requester Return Field',
       'College State',
+      'Enrollment Status',
+      'Enrollment Begin',
+      'Enrollment End',
       'Enrollment Major 1',
+      'Degree Major 1',
       'Class Level',
       'Degree Title',
     ];
 
+    // Dates from ClearingHouse arrive in two broken forms:
+    // 1. Numeric YYYYMMDD float: 20250510.0
+    // 2. Epoch + fractional YYYYMMDD: "1970-01-01T00:00:00.020250821"
+    const formatCHDate = (raw: unknown): string => {
+      let digits = '';
+      if (typeof raw === 'number') {
+        digits = String(Math.round(raw));
+      } else if (typeof raw === 'string') {
+        const fracMatch = raw.match(/1970-01-01T00:00:00\.0?(\d{8})/);
+        if (fracMatch) {
+          digits = fracMatch[1];
+        } else {
+          // plain string date — just return as-is
+          return raw;
+        }
+      }
+      if (/^\d{8}$/.test(digits)) {
+        const y = digits.slice(0, 4), m = digits.slice(4, 6), d = digits.slice(6, 8);
+        return `${m}/${d}/${y}`;
+      }
+      return String(raw);
+    };
+
+    const DATE_FIELDS = new Set(['Enrollment Begin', 'Enrollment End']);
+
+    const ENROLLMENT_STATUS_MAP: Record<string, string> = {
+      F: 'Full-time',
+      Q: 'Three-quarter time',
+      H: 'Half-time',
+      L: 'Less than half-time',
+      A: 'Leave of absence',
+      W: 'Withdrawn',
+      D: 'Deceased',
+    };
+
+    const CLASS_LEVEL_MAP: Record<string, string> = {
+      '1': 'First Year (Undergraduate)', '2': 'Sophomore (Undergraduate)',
+      '3': 'Junior (Undergraduate)', '4': 'Senior (Undergraduate)',
+      '5': 'Fifth Year+ (Undergraduate)',
+      F: 'Freshman', S: 'Sophomore', J: 'Junior', R: 'Senior',
+      C: 'Certificate', N: 'Unspecified (UG)', B: "Bachelor's",
+      M: "Master's", D: "Doctor's", P: 'Postdoctorate',
+      L: 'First Professional', G: 'Unspecified (Grad)', A: "Associate's",
+      T: 'Post Baccalaureate Certificate',
+    };
+
     // Show only allowed fields with non-null values
     const filteredEntries = allowedFields
-      .map(key => [key, clearingHouseData.payload[key]] as [string, unknown])
+      .map(key => {
+        let value = clearingHouseData.payload[key];
+        if (DATE_FIELDS.has(key) && value != null && value !== '') {
+          value = formatCHDate(value);
+        } else if (key === 'Enrollment Status' && value != null && value !== '') {
+          value = ENROLLMENT_STATUS_MAP[String(value).toUpperCase()] ?? value;
+        } else if (key === 'Class Level' && value != null && value !== '') {
+          value = CLASS_LEVEL_MAP[String(value).toUpperCase()] ?? value;
+        }
+        return [key, value] as [string, unknown];
+      })
       .filter(([, value]) => {
         if (value === null || value === undefined || value === '') return false;
         if (typeof value === 'string' && value.trim() === '') return false;

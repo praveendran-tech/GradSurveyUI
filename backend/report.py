@@ -6,7 +6,7 @@ Qualtrics, LinkedIn, and Clearinghouse payloads are all read directly.
 
   Career outcomes   – Qualtrics STATUS → LinkedIn → Clearinghouse → master DB → Unresolved
   Geographic        – Qualtrics EMP_CITY1_1 + LinkedIn employer_state
-  Nature/modality   – Qualtrics EMP_NATURE/EMP_FIELD + LinkedIn employment_modality
+  Nature/modality   – Qualtrics EMP_NATURE/EMP_FIELD/EMP_JOBSITE + EMP_TYPE (emp status) + LinkedIn employment_modality
   Salary            – Qualtrics EMP_SALARY/EMP_BONUS (no salary field in LinkedIn/CH)
   Search methods    – Qualtrics EMP_HOW_* (survey-specific, not in other sources)
   Business          – Qualtrics STBUS_* + LinkedIn started_business_*
@@ -347,10 +347,17 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         and "seeking" not in s["qualtrics_data"][0]["payload"].get("STATUS", "").lower()
     ]
 
-    # ── Nature / modality of positions — Qualtrics + LinkedIn (all sources) ────
+    # ── Nature / modality / status of positions — Qualtrics + LinkedIn (all sources) ────
     nature_counts   = defaultdict(int)
     field_counts    = defaultdict(int)
     modality_counts = defaultdict(int)
+    emp_status_counts = defaultdict(int)
+
+    _OTHER_SKIP = {"other - none of the above", "other – none of the above",
+                   "other-none of the above", "none of the above", "other"}
+
+    def _skip_other(val: str) -> bool:
+        return val.lower().strip() in _OTHER_SKIP
 
     for s in students:
         outcome = _student_outcome(s)
@@ -360,19 +367,22 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
         if s.get("qualtrics_data"):
             p = s["qualtrics_data"][0]["payload"]
             nat = p.get("EMP_NATURE", "").strip()
-            if nat:
+            if nat and not _skip_other(nat):
                 nature_counts[nat] += 1
             fld = p.get("EMP_FIELD", "").strip()
-            if fld:
+            if fld and not _skip_other(fld):
                 field_counts[fld] += 1
-            mod = p.get("EMP_TYPE", "").strip()
-            if mod:
+            mod = p.get("EMP_JOBSITE", "").strip()
+            if mod and not _skip_other(mod):
                 modality_counts[mod] += 1
+            status = p.get("EMP_TYPE", "").strip()
+            if status and not _skip_other(status):
+                emp_status_counts[status] += 1
         # LinkedIn
         if s.get("linkedin_data"):
             li  = s["linkedin_data"][0]["payload"]
             mod = (li.get("modality_(hybrid_etc.if_known)") or li.get("employment_modality") or "").strip()
-            if mod:
+            if mod and not _skip_other(mod):
                 modality_counts[mod] += 1
 
     # ── Salary (Qualtrics-only) ───────────────────────────────────────────────
@@ -518,7 +528,7 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
     degree_counts      = defaultdict(int)
     cont_edu_programs  = []
 
-    _UNSPECIFIED = {"unspecified", "unknown", "n/a", "na", "none", ""}
+    _UNSPECIFIED = {"unspecified", "unknown", "n/a", "na", "none", "", "other"}
 
     def _blank_or_unspecified(val: str) -> bool:
         return not val or val.lower().strip() in _UNSPECIFIED
@@ -756,10 +766,11 @@ def aggregate_report_data(major_filter=None, school_filter=None, term_filter=Non
             ) if grand_total else 0,
         },
         "nature": {
-            "respondents":    len(employed_qualtrics),
-            "nature_counts":  dict(nature_counts),
-            "field_counts":   dict(field_counts),
-            "modality_counts": dict(modality_counts),
+            "respondents":       len(employed_qualtrics),
+            "nature_counts":     dict(nature_counts),
+            "field_counts":      dict(field_counts),
+            "modality_counts":   dict(modality_counts),
+            "emp_status_counts": dict(emp_status_counts),
         },
         "salary":    salary_stats,
         "emp_search": {
@@ -1017,7 +1028,8 @@ def generate_report_docx(data: dict) -> bytes:
     doc.add_paragraph()
 
     # ── Nature of Positions ────────────────────────────────────────────────────
-    has_nature = nature["nature_counts"] or nature["field_counts"] or nature.get("modality_counts")
+    has_nature = (nature["nature_counts"] or nature["field_counts"]
+                  or nature.get("modality_counts") or nature.get("emp_status_counts"))
     if nature["respondents"] >= 3 and has_nature:
         _section_heading(doc, "Nature of Positions")
         _body_text(doc,
@@ -1031,6 +1043,11 @@ def generate_report_docx(data: dict) -> bytes:
             total_fld = sum(nature["field_counts"].values())
             for label, n in sorted(nature["field_counts"].items(), key=lambda x: -x[1]):
                 _bullet(doc, f"{_pct(n, total_fld)} – {label}")
+        if nature.get("emp_status_counts"):
+            total_status = sum(nature["emp_status_counts"].values())
+            _body_text(doc, "Employment status:")
+            for label, n in sorted(nature["emp_status_counts"].items(), key=lambda x: -x[1]):
+                _bullet(doc, f"{_pct(n, total_status)} – {label}")
         if nature.get("modality_counts"):
             total_mod = sum(nature["modality_counts"].values())
             _body_text(doc, "Employment modality (in-person, remote, hybrid):")

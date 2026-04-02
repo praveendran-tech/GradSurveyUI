@@ -66,8 +66,21 @@ export const StudentCard: React.FC<StudentCardProps> = ({
     setExpanded(!expanded);
   };
 
-  const hasData = (student.qualtrics_data && student.qualtrics_data.length > 0) ||
-                  (student.linkedin_data && student.linkedin_data.length > 0) ||
+  const hasQualtricsStatus: boolean = !!(student.qualtrics_data && student.qualtrics_data.length > 0 &&
+    (() => {
+      const status = student.qualtrics_data![0].payload?.STATUS;
+      return status != null && String(status).trim() !== '' && String(status).toUpperCase() !== 'NULL';
+    })());
+
+  const hasLinkedInUrl: boolean = !!(student.linkedin_data && student.linkedin_data.length > 0 &&
+    (() => {
+      const p = student.linkedin_data![0].payload;
+      const url = p?.linkedin_url || p?.url || p?.profile_url;
+      return url && String(url).trim() !== '' && String(url).toUpperCase() !== 'NULL';
+    })());
+
+  const hasData = hasQualtricsStatus ||
+                  hasLinkedInUrl ||
                   (student.clearinghouse_data && student.clearinghouse_data.length > 0);
   const hasMasterData = student.masterData != null;
 
@@ -189,9 +202,51 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                 {SCHOOL_CODE_TO_NAME[student.school] ?? student.school}
               </Typography>
 
+              {/* Master data summary — employer / activity / position */}
+              {hasMasterData && (student.masterData!.currentActivity || student.masterData!.currentEmployer || student.masterData!.currentPosition || student.masterData!.currentInstitution) && (
+                <Box
+                  mt={1.5}
+                  px={1.5}
+                  py={1}
+                  sx={{
+                    background: 'linear-gradient(135deg, rgba(76,175,80,0.07) 0%, rgba(76,175,80,0.03) 100%)',
+                    borderRadius: 2,
+                    borderLeft: '3px solid #4CAF50',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                  }}
+                >
+                  {student.masterData!.currentActivity && (
+                    <Typography variant="caption" color="text.secondary">
+                      <strong style={{ color: '#2C7A2C' }}>Status:</strong>{' '}
+                      {student.masterData!.currentActivity}
+                    </Typography>
+                  )}
+                  {student.masterData!.currentEmployer && (
+                    <Typography variant="caption" color="text.secondary">
+                      <strong style={{ color: '#2C7A2C' }}>Employer:</strong>{' '}
+                      {student.masterData!.currentEmployer}
+                    </Typography>
+                  )}
+                  {student.masterData!.currentPosition && (
+                    <Typography variant="caption" color="text.secondary">
+                      <strong style={{ color: '#2C7A2C' }}>Position:</strong>{' '}
+                      {student.masterData!.currentPosition}
+                    </Typography>
+                  )}
+                  {student.masterData!.currentInstitution && (
+                    <Typography variant="caption" color="text.secondary">
+                      <strong style={{ color: '#2C7A2C' }}>Institution:</strong>{' '}
+                      {student.masterData!.currentInstitution}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
               {/* Data availability indicators */}
               <Box display="flex" gap={1} mt={2} flexWrap="wrap">
-                {student.qualtrics_data && student.qualtrics_data.length > 0 && (
+                {hasQualtricsStatus && (
                   <Chip
                     label="Qualtrics"
                     size="small"
@@ -203,7 +258,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                     }}
                   />
                 )}
-                {student.linkedin_data && student.linkedin_data.length > 0 && (
+                {hasLinkedInUrl && (
                   <Chip
                     label="LinkedIn"
                     size="small"
@@ -221,6 +276,18 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                     size="small"
                     sx={{
                       background: 'linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%)',
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      height: 24,
+                    }}
+                  />
+                )}
+                {!hasQualtricsStatus && !hasLinkedInUrl && !(student.clearinghouse_data?.length) && (
+                  <Chip
+                    label="No Source"
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, #9E9E9E 0%, #757575 100%)',
                       color: 'white',
                       fontSize: '0.7rem',
                       height: 24,
@@ -303,22 +370,22 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                   gap={3}
                   sx={{ mb: 3 }}
                 >
-                  {student.qualtrics_data && student.qualtrics_data.length > 0 && (
+                  {hasQualtricsStatus && (
                     <Box sx={{ animation: `${slideDown} 0.6s ease-out` }}>
                       <DataSourceCard
                         type="qualtrics"
-                        data={student.qualtrics_data[0]}
+                        data={student.qualtrics_data![0]}
                         onSelect={() => onSelectSource(student.uid, 'qualtrics')}
                         isSelected={student.masterData?.selectedSource === 'qualtrics'}
                         disabled={isSaving}
                       />
                     </Box>
                   )}
-                  {student.linkedin_data && student.linkedin_data.length > 0 && (
+                  {hasLinkedInUrl && (
                     <Box sx={{ animation: `${slideDown} 0.7s ease-out` }}>
                       <DataSourceCard
                         type="linkedin"
-                        data={student.linkedin_data[0]}
+                        data={student.linkedin_data![0]}
                         onSelect={() => onSelectSource(student.uid, 'linkedin')}
                         isSelected={student.masterData?.selectedSource === 'linkedin'}
                         disabled={isSaving}

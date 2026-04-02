@@ -47,9 +47,10 @@ interface OutcomeRow { label: string; n: number }
 interface TableEntry { label?: string; n?: number; employer?: string; title?: string; institution?: string; program?: string; degree?: string }
 interface ReportData {
   meta: { major: string; school: string; term: string; generated_at: string };
+  demographics?: { table: [string, number][] };
   totals: { total_graduates: number; survey_count: number; linkedin_count: number; clearinghouse_count: number; known_count: number; survey_response_rate: number; knowledge_rate: number };
   outcomes: { table: OutcomeRow[]; grand_total: number; placement_rate: number; employed_count: number; employed_pct: number; in_workforce_count: number; in_workforce_pct: number };
-  nature: { respondents: number; nature_counts: Record<string, number>; field_counts: Record<string, number>; modality_counts: Record<string, number> };
+  nature: { respondents: number; nature_counts: Record<string, number>; field_counts: Record<string, number>; modality_counts: Record<string, number>; emp_status_counts: Record<string, number> };
   salary: { n_reported: number; n_full_time: number; bonus_count: number; bonus_median: number | null; bonus_list: string[]; p25: number; p50: number; p75: number } | null;
   emp_search: { respondents: number; table: [string, number][] };
   geography: { respondents: number; table: [string, number][] };
@@ -67,6 +68,51 @@ interface ReportData {
 
 const pct = (n: number, total: number) =>
   total === 0 ? 'N/A' : `${((n / total) * 100).toFixed(1)}%`;
+
+// Standard degree categories per feedback Q16
+const DEGREE_CATEGORY_ORDER = [
+  'Masters/MBA',
+  'Ph.D. or Doctoral',
+  'Health Professional (MD, DO, Pharm.D., Au.D., etc.)',
+  'Unspecified',
+  'Law (J.D.)',
+  'Certificate/Certification',
+  "Second Bachelor's Degree",
+  'Non-Degree Seeking (Post-Bac., cont. Edu. Credits)',
+  "Associate's Degree",
+];
+
+function normalizeDegree(raw: string): string {
+  const s = (raw || '').toLowerCase().trim();
+  if (!s || s === 'null' || s === 'unspecified' || s === 'unknown' || s === 'n/a') return 'Unspecified';
+  if (s.includes('master') || s.includes('mba') || s.includes('m.b.a') || s === 'm.s.' || s === 'm.a.' || s.startsWith('ms') || s.startsWith('ma ')) return 'Masters/MBA';
+  if (s.includes('ph.d') || s.includes('phd') || s.includes('doctor') || s.includes('doctoral') || s.includes('d.phil')) return 'Ph.D. or Doctoral';
+  if (s.includes('m.d') || s.includes(' md') || s === 'md' || s.includes('pharm') || s.includes('au.d') || s.includes('d.o') || s === 'do' || s.includes('dvm') || s.includes('dds') || s.includes('d.m.d') || s.includes('health professional')) return 'Health Professional (MD, DO, Pharm.D., Au.D., etc.)';
+  if (s.includes('j.d') || s === 'jd' || s.includes('juris') || s.includes(' law') || s === 'law') return 'Law (J.D.)';
+  if (s.includes('certif')) return 'Certificate/Certification';
+  if (s.includes('second bachelor') || s.includes('2nd bachelor')) return "Second Bachelor's Degree";
+  if (s.includes('non-degree') || s.includes('non degree') || s.includes('post-bac') || s.includes('post bac') || s.includes('cont. edu') || s.includes('continuing education credit')) return 'Non-Degree Seeking (Post-Bac., cont. Edu. Credits)';
+  if (s.includes('associate')) return "Associate's Degree";
+  // Fall back to Unspecified for anything we can't categorise
+  return 'Unspecified';
+}
+
+function aggregateDegrees(rawTable: [string, number][]): [string, number][] {
+  const counts: Record<string, number> = {};
+  rawTable.forEach(([deg, n]) => {
+    const cat = normalizeDegree(deg);
+    counts[cat] = (counts[cat] ?? 0) + n;
+  });
+  // Return in standard order, then any remaining
+  const result: [string, number][] = [];
+  DEGREE_CATEGORY_ORDER.forEach((cat) => {
+    if (counts[cat]) result.push([cat, counts[cat]]);
+  });
+  Object.entries(counts).forEach(([cat, n]) => {
+    if (!DEGREE_CATEGORY_ORDER.includes(cat)) result.push([cat, n]);
+  });
+  return result;
+}
 
 const HeaderCell: React.FC<{ children: React.ReactNode; align?: 'left' | 'center' | 'right' }> = ({ children, align = 'left' }) => (
   <TableCell
@@ -110,7 +156,9 @@ export const ReportPage: React.FC = () => {
   const availableMajors = (selectedSchool === 'all'
     ? MAJORS
     : MAJORS.filter((m) => m.schoolCode === selectedSchool)
-  ).slice().sort((a, b) => a.name.localeCompare(b.name));
+  ).slice().sort((a, b) => a.name.localeCompare(b.name)).filter(
+    (m, idx, arr) => idx === 0 || m.name !== arr[idx - 1].name
+  );
 
   const schoolLabel = selectedSchool === 'all' ? 'All Schools' : (SCHOOL_CODE_TO_NAME[selectedSchool] ?? selectedSchool);
 
@@ -413,6 +461,45 @@ export const ReportPage: React.FC = () => {
                   </Box>
                 </Paper>
 
+                {/* Demographics */}
+                {reportData.demographics && reportData.demographics.table.length > 0 && (
+                  <Accordion defaultExpanded elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
+                      <Typography fontWeight={700}>Demographics</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 0 }}>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <HeaderCell>Track</HeaderCell>
+                              <HeaderCell align="center">N</HeaderCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {reportData.demographics.table.map(([track, n], i) => (
+                              <DataRow key={track} idx={i} cells={[track, n]} />
+                            ))}
+                            <DataRow
+                              bold
+                              idx={reportData.demographics.table.length}
+                              cells={[
+                                'Total',
+                                reportData.demographics.table.reduce((sum, [, n]) => sum + n, 0),
+                              ]}
+                            />
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <Box sx={{ px: 2, py: 1.5 }}>
+                        <Typography variant="caption" color="text.secondary" fontStyle="italic">
+                          Note: Throughout this report, percentages may not sum to 100% due to rounding.
+                        </Typography>
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
                 {/* Career Outcomes */}
                 <Accordion defaultExpanded elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
@@ -444,34 +531,124 @@ export const ReportPage: React.FC = () => {
                         </TableBody>
                       </Table>
                     </TableContainer>
+                    <Box sx={{ px: 2, py: 1.5, bgcolor: '#fffbf0', borderTop: '1px solid #eee' }}>
+                      <Typography variant="caption" color="text.secondary">
+                        <strong>% In Workforce</strong> includes graduates who are Employed full-time, Employed part-time, Participating in a volunteer or service program, Serving in the military, or Starting a business — divided by the total number of graduates with known outcomes (including job seekers).
+                      </Typography>
+                    </Box>
                   </AccordionDetails>
                 </Accordion>
 
                 {/* Nature of Positions */}
-                {reportData.nature.respondents >= 3 && (Object.keys(reportData.nature.nature_counts).length > 0 || Object.keys(reportData.nature.field_counts).length > 0) && (
-                  <Accordion elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
-                      <Typography fontWeight={700}>Nature of Positions</Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Out of {reportData.nature.respondents} graduates who answered survey questions:
-                      </Typography>
-                      {Object.entries(reportData.nature.nature_counts).map(([label, n]) => {
-                        const total = Object.values(reportData.nature.nature_counts).reduce((a, b) => a + b, 0);
-                        return (
-                          <Box key={label} sx={{ mb: 1.5 }}>
-                            <Box display="flex" justifyContent="space-between" mb={0.5}>
-                              <Typography variant="body2">{label}</Typography>
-                              <Typography variant="body2" fontWeight={700}>{pct(n, total)}</Typography>
-                            </Box>
-                            <LinearProgress variant="determinate" value={(n / total) * 100} sx={{ height: 8, borderRadius: 4 }} />
+                {reportData.nature.respondents >= 3 && (
+                  Object.keys(reportData.nature.nature_counts).length > 0 ||
+                  Object.keys(reportData.nature.field_counts).length > 0 ||
+                  Object.keys(reportData.nature.emp_status_counts ?? {}).length > 0 ||
+                  Object.keys(reportData.nature.modality_counts ?? {}).length > 0
+                ) && (() => {
+                  const fieldEntries = Object.entries(reportData.nature.field_counts);
+                  const fieldTotal = fieldEntries.reduce((s, [, n]) => s + n, 0);
+
+                  // Categorise field_counts entries into directly/somewhat/not related
+                  let directN = 0, somewhatN = 0, notN = 0;
+                  fieldEntries.forEach(([label, n]) => {
+                    const l = label.toLowerCase();
+                    if (l.includes('not') || l.includes('unrelated')) notN += n;
+                    else if (l.includes('somewhat') || l.includes('utilizes') || l.includes('skills')) somewhatN += n;
+                    else directN += n;
+                  });
+                  const relatedN   = directN + somewhatN;
+                  const relatedPct = fieldTotal > 0 ? Math.round((relatedN   / fieldTotal) * 100) : 0;
+                  const directPct  = fieldTotal > 0 ? Math.round((directN    / fieldTotal) * 100) : 0;
+                  const somewhatPct= fieldTotal > 0 ? Math.round((somewhatN  / fieldTotal) * 100) : 0;
+                  const notPct     = fieldTotal > 0 ? Math.round((notN       / fieldTotal) * 100) : 0;
+
+                  const natureEntries = Object.entries(reportData.nature.nature_counts);
+                  const natureTotal = natureEntries.reduce((s, [, n]) => s + n, 0);
+
+                  const statusEntries = Object.entries(reportData.nature.emp_status_counts ?? {});
+                  const statusTotal = statusEntries.reduce((s, [, n]) => s + n, 0);
+
+                  const modalityEntries = Object.entries(reportData.nature.modality_counts ?? {});
+                  const modalityTotal = modalityEntries.reduce((s, [, n]) => s + n, 0);
+
+                  return (
+                    <Accordion elevation={2} sx={{ borderRadius: '12px !important', overflow: 'hidden' }}>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ bgcolor: '#fafafa', borderBottom: '1px solid #eee' }}>
+                        <Typography fontWeight={700}>Nature of Positions</Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        {/* Narrative paragraph for field-of-study relationship */}
+                        {fieldTotal > 0 && (
+                          <Box sx={{ mb: 3, p: 2, bgcolor: '#f8f9fa', borderRadius: 2, borderLeft: '4px solid #E21833' }}>
+                            <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
+                              {relatedPct > 0 && (
+                                <>
+                                  <strong>{relatedPct}%</strong> replied that their employment is either directly related to their field of study/major (<strong>{directPct}%</strong>) or utilizes knowledge, skills and abilities gained through their study (<strong>{somewhatPct}%</strong>).
+                                  {notPct > 0 && <> <strong>{notPct}%</strong> indicated that their position was not at all related to their field of study/major.</>}
+                                </>
+                              )}
+                            </Typography>
                           </Box>
-                        );
-                      })}
-                    </AccordionDetails>
-                  </Accordion>
-                )}
+                        )}
+
+                        {/* Progress bars for nature_counts (employment type breakdown) */}
+                        {natureEntries.length > 0 && (
+                          <>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                              Out of {reportData.nature.respondents} graduates who answered survey questions:
+                            </Typography>
+                            {natureEntries.map(([label, n]) => (
+                              <Box key={label} sx={{ mb: 1.5 }}>
+                                <Box display="flex" justifyContent="space-between" mb={0.5}>
+                                  <Typography variant="body2">{label}</Typography>
+                                  <Typography variant="body2" fontWeight={700}>{pct(n, natureTotal)}</Typography>
+                                </Box>
+                                <LinearProgress variant="determinate" value={(n / natureTotal) * 100} sx={{ height: 8, borderRadius: 4 }} />
+                              </Box>
+                            ))}
+                          </>
+                        )}
+
+                        {/* Employment status (EMP_TYPE) */}
+                        {statusEntries.length > 0 && (
+                          <>
+                            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mt: natureEntries.length > 0 ? 2 : 0 }}>
+                              Employment status:
+                            </Typography>
+                            {statusEntries.map(([label, n]) => (
+                              <Box key={label} sx={{ mb: 1.5 }}>
+                                <Box display="flex" justifyContent="space-between" mb={0.5}>
+                                  <Typography variant="body2">{label}</Typography>
+                                  <Typography variant="body2" fontWeight={700}>{pct(n, statusTotal)}</Typography>
+                                </Box>
+                                <LinearProgress variant="determinate" value={(n / statusTotal) * 100} sx={{ height: 8, borderRadius: 4 }} />
+                              </Box>
+                            ))}
+                          </>
+                        )}
+
+                        {/* Employment modality (EMP_JOBSITE) */}
+                        {modalityEntries.length > 0 && (
+                          <>
+                            <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mt: 2 }}>
+                              Employment modality (in-person, remote, hybrid):
+                            </Typography>
+                            {modalityEntries.map(([label, n]) => (
+                              <Box key={label} sx={{ mb: 1.5 }}>
+                                <Box display="flex" justifyContent="space-between" mb={0.5}>
+                                  <Typography variant="body2">{label}</Typography>
+                                  <Typography variant="body2" fontWeight={700}>{pct(n, modalityTotal)}</Typography>
+                                </Box>
+                                <LinearProgress variant="determinate" value={(n / modalityTotal) * 100} sx={{ height: 8, borderRadius: 4 }} />
+                              </Box>
+                            ))}
+                          </>
+                        )}
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })()}
 
                 {/* Salary */}
                 {reportData.salary && (
@@ -661,25 +838,29 @@ export const ReportPage: React.FC = () => {
                           {reportData.continuing_education.umd_count > 0 &&
                             ` ${reportData.continuing_education.umd_count} are attending the University of Maryland, College Park.`}
                         </Typography>
-                        {reportData.continuing_education.degree_table.length > 0 && (
-                          <TableContainer sx={{ mt: 1.5 }}>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <HeaderCell>Degree Type</HeaderCell>
-                                  <HeaderCell align="center">N</HeaderCell>
-                                  <HeaderCell align="center">%</HeaderCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {reportData.continuing_education.degree_table.map(([deg, n], i) => {
-                                  const total = reportData.continuing_education.degree_table.reduce((a, [, v]) => a + v, 0);
-                                  return <DataRow key={deg} idx={i} cells={[deg, n, pct(n, total)]} />;
-                                })}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        )}
+                        {reportData.continuing_education.degree_table.length > 0 && (() => {
+                          const normalised = aggregateDegrees(reportData.continuing_education.degree_table);
+                          const total = normalised.reduce((a, [, v]) => a + v, 0);
+                          return (
+                            <TableContainer sx={{ mt: 1.5 }}>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow>
+                                    <HeaderCell>Type of Degree/Program</HeaderCell>
+                                    <HeaderCell align="center">#</HeaderCell>
+                                    <HeaderCell align="center">%</HeaderCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {normalised.map(([deg, n], i) => (
+                                    <DataRow key={deg} idx={i} cells={[deg, n, pct(n, total)]} />
+                                  ))}
+                                  <DataRow bold idx={normalised.length} cells={['Total', total, '100.0%']} />
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          );
+                        })()}
                         {reportData.continuing_education.programs.length > 0 && (
                           <TableContainer sx={{ mt: 2 }}>
                             <Table size="small">

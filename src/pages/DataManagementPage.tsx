@@ -14,6 +14,8 @@ import {
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PeopleIcon from '@mui/icons-material/People';
+import DownloadIcon from '@mui/icons-material/Download';
+import { unparse } from 'papaparse';
 import { Header } from '../components/Header';
 import { FilterBar } from '../components/FilterBar';
 import { StudentList } from '../components/StudentList';
@@ -23,6 +25,7 @@ import { AlertDialog } from '../components/AlertDialog';
 import type { AlertSeverity } from '../components/AlertDialog';
 import type { FilterValues, Student, MasterData } from '../types';
 import { api } from '../api';
+import { MAJOR_COMPOUND_TO_NAME, MAJOR_CODE_TO_NAME } from '../majorData';
 
 // Keyframe animations
 const shimmer = keyframes`
@@ -81,6 +84,7 @@ export const DataManagementPage = () => {
   });
   const [termOptions, setTermOptions] = useState<string[]>([]);
   const [savingUid, setSavingUid] = useState<string | null>(null);
+  const [downloadingNoStatus, setDownloadingNoStatus] = useState(false);
   const [alertState, setAlertState] = useState<{
     open: boolean;
     severity: AlertSeverity;
@@ -293,6 +297,43 @@ export const DataManagementPage = () => {
         }
       }
     );
+  };
+
+  const handleDownloadNoStatus = async () => {
+    setDownloadingNoStatus(true);
+    try {
+      // Fetch all students with no data source (no qualtrics / linkedin / clearinghouse)
+      const data = await api.getStudents({
+        sources: ['no-source'],
+        limit: 100000,
+        offset: 0,
+        name: filters.name || undefined,
+        major: filters.major.length ? filters.major : undefined,
+        school: filters.school || undefined,
+        term: filters.term.length ? filters.term : undefined,
+        uid: filters.uid || undefined,
+      });
+      const rows = data.students.map((s) => ({
+        Name: s.name,
+        UID: s.uid,
+        Major: MAJOR_COMPOUND_TO_NAME[`${s.school}|${s.major}`] ?? MAJOR_CODE_TO_NAME[s.major] ?? s.major,
+        Email: s.email,
+      }));
+      const csv = unparse(rows, { header: true });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `no_status_students_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showAlert('error', 'Download Failed', err instanceof Error ? err.message : 'Failed to download no-status student list.');
+    } finally {
+      setDownloadingNoStatus(false);
+    }
   };
 
   const resetFilters = () => {
@@ -517,6 +558,30 @@ export const DataManagementPage = () => {
                     }}
                   />
                 )}
+                {hasActiveFilters && <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={downloadingNoStatus ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
+                  onClick={handleDownloadNoStatus}
+                  disabled={downloadingNoStatus}
+                  sx={{
+                    ml: 'auto',
+                    background: 'linear-gradient(135deg, #37474F 0%, #546E7A 100%)',
+                    color: 'white',
+                    fontWeight: 600,
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    boxShadow: '0 4px 12px rgba(55, 71, 79, 0.3)',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #263238 0%, #37474F 100%)',
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 6px 16px rgba(55, 71, 79, 0.4)',
+                    },
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  {downloadingNoStatus ? 'Downloading…' : 'Download No-Status List'}
+                </Button>}
               </Box>
             </Box>
           </Fade>

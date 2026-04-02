@@ -79,11 +79,13 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
     });
   };
 
-  // Majors filtered by selected school (or all if no school selected), sorted alphabetically
+  // Majors filtered by selected school (or all if no school selected), sorted alphabetically, deduplicated by name
   const availableMajors = (filters.school
     ? MAJORS.filter((m) => m.schoolCode === filters.school)
     : MAJORS
-  ).slice().sort((a, b) => a.name.localeCompare(b.name));
+  ).slice().sort((a, b) => a.name.localeCompare(b.name)).filter(
+    (m, idx, arr) => idx === 0 || m.name !== arr[idx - 1].name
+  );
 
   const fieldSx = {
     '& .MuiOutlinedInput-root': {
@@ -264,7 +266,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
 
         {/* Data Sources multi-select */}
         <Box flex="1 1 250px">
-          <FormControl fullWidth size="small">
+          <FormControl fullWidth size="small" sx={fieldSx}>
             <InputLabel id="sources-label">Data Sources</InputLabel>
             <Select
               labelId="sources-label"
@@ -286,6 +288,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
                           color: 'white',
                           fontSize: '0.7rem',
                           height: 24,
+                          fontWeight: 600,
                         }}
                       />
                     );
@@ -295,16 +298,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, t
             >
               {SOURCE_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
-                  <Box display="flex" alignItems="center" gap={1}>
+                  <Box display="flex" alignItems="center" gap={1.5}>
                     <Box
                       sx={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: '50%',
-                        background: option.color,
+                        width: 14,
+                        height: 14,
+                        borderRadius: '4px',
+                        background: `linear-gradient(135deg, ${option.color} 0%, ${option.color}DD 100%)`,
+                        flexShrink: 0,
                       }}
                     />
-                    {option.label}
+                    <Typography variant="body2" fontWeight={500}>{option.label}</Typography>
                   </Box>
                 </MenuItem>
               ))}
